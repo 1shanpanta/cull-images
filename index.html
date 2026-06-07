@@ -3,89 +3,99 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Cull — a quiet way to clear out a folder of images</title>
-<meta name="description" content="Step through a folder of images, keep or cull each one, then take a delete list to Claude — or remove the rejects yourself. Entirely in your browser; nothing is uploaded." />
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23f4f1ea'/%3E%3Ccircle cx='11' cy='16' r='4.5' fill='none' stroke='%235e7355' stroke-width='1.6'/%3E%3Cpath d='M18 12 L25 20 M25 12 L18 20' stroke='%23b0573f' stroke-width='1.6' fill='none'/%3E%3C/svg%3E" />
+<title>Cull — a calm bench for clearing out a folder of images</title>
+<meta name="description" content="Step through a folder of images, keep what works and cull the rest, then take a delete list to Claude — or remove the rejects yourself. Entirely in your browser; nothing is uploaded." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23f1ece1'/%3E%3Ccircle cx='11' cy='16' r='4.5' fill='none' stroke='%235f7a52' stroke-width='1.7'/%3E%3Cpath d='M18 12 L25 20 M25 12 L18 20' stroke='%23b75640' stroke-width='1.7' fill='none'/%3E%3C/svg%3E" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=Hanken+Grotesk:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <style>
   :root {
-    --bg: #f4f1ea;
-    --raise: #faf8f2;
-    --ink: #232019;
-    --muted: #8a8475;
-    --faint: #b3ad9d;
-    --line: #ddd7c8;
-    --keep: #5e7355;     /* muted sage */
-    --cull: #b0573f;     /* muted clay */
-    --keep-bg: #eef0e8;
-    --cull-bg: #f4e7e1;
+    --bg: #f1ece1;
+    --raise: #f8f4ea;
+    --ink: #211e17;
+    --muted: #837c6b;
+    --faint: #b0a895;
+    --line: #ddd5c4;
+    --keep: #5f7a52;
+    --cull: #b75640;
+    --keep-bg: #e9ecdf;
+    --cull-bg: #f3e3dc;
     --ease: cubic-bezier(0.22, 1, 0.36, 1);
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body {
     background: var(--bg); color: var(--ink);
-    font-family: "Instrument Sans", system-ui, sans-serif;
-    font-size: 15px; line-height: 1.55; letter-spacing: -0.01em;
-    display: flex; flex-direction: column; overflow: hidden;
+    font-family: "Hanken Grotesk", system-ui, sans-serif;
+    font-size: 15px; line-height: 1.55;
+    display: flex; flex-direction: column; overflow: hidden; position: relative;
     -webkit-font-smoothing: antialiased;
   }
+  /* warm grain + loupe atmosphere */
+  body::before { content: ""; position: fixed; inset: 0; z-index: 1; pointer-events: none; opacity: 0.04; mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
   button { font-family: inherit; cursor: pointer; color: inherit; }
   .hidden { display: none !important; }
+  .serif { font-family: Newsreader, Georgia, serif; }
   .mono { font-family: "DM Mono", ui-monospace, monospace; }
-  .micro { font-family: "DM Mono", monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+  .micro { font-family: "DM Mono", monospace; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
   ::selection { background: var(--ink); color: var(--bg); }
   kbd { font-family: "DM Mono", monospace; font-size: 11px; border: 1px solid var(--line); border-radius: 3px; padding: 1px 6px; color: var(--muted); }
 
-  /* thin geometric marks (no icons) */
-  .ring { border: 1.5px solid currentColor; border-radius: 50%; }
+  .ring { border: 1.6px solid currentColor; border-radius: 50%; }
   .ex { position: relative; }
-  .ex::before, .ex::after { content: ""; position: absolute; top: 50%; left: 0; right: 0; height: 1.5px; background: currentColor; }
+  .ex::before, .ex::after { content: ""; position: absolute; top: 50%; left: 0; right: 0; height: 1.6px; background: currentColor; }
   .ex::before { transform: rotate(45deg); } .ex::after { transform: rotate(-45deg); }
-
-  /* corner registration ticks */
-  .ticks::before, .ticks::after { content: ""; position: fixed; width: 10px; height: 10px; pointer-events: none; z-index: 3; }
+  .ticks::before, .ticks::after { content: ""; position: fixed; width: 11px; height: 11px; pointer-events: none; z-index: 4; }
   .ticks::before { top: 18px; left: 18px; border-top: 1px solid var(--faint); border-left: 1px solid var(--faint); }
   .ticks::after { bottom: 18px; right: 18px; border-bottom: 1px solid var(--faint); border-right: 1px solid var(--faint); }
+  #app { position: relative; z-index: 2; flex: 1; display: flex; flex-direction: column; min-height: 0; }
 
   /* ============ LANDING ============ */
   #landing { flex: 1; position: relative; display: flex; flex-direction: column; overflow: hidden; }
-  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 26px 40px; }
-  .wordmark { font-weight: 600; font-size: 16px; letter-spacing: 0.02em; }
-  .wordmark .d { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--keep); margin-right: 7px; vertical-align: 1px; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 24px 40px; }
+  .wordmark { font-weight: 600; font-size: 16px; }
+  .wordmark .d { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--keep); margin-right: 8px; vertical-align: 1px; }
   .status { display: flex; align-items: center; gap: 9px; }
   .status .live { width: 5px; height: 5px; border-radius: 50%; background: var(--keep); animation: soft 3s ease-in-out infinite; }
   @keyframes soft { 0%,100%{opacity:.35} 50%{opacity:1} }
 
-  .land-body { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 40px; }
-  .hero { max-width: 1080px; }
-  .hero .eyebrow { margin-bottom: 20px; opacity: 0; animation: rise .7s .05s var(--ease) forwards; }
-  .hero h1 { font-weight: 500; font-size: clamp(32px, 4.6vw, 54px); line-height: 1.05; letter-spacing: -0.035em; margin: 0 0 22px;
+  .land-body { flex: 1; min-height: 0; display: flex; align-items: center; padding: 0 40px; }
+  .hero-grid { width: 100%; max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 1.02fr 0.98fr; gap: 70px; align-items: center; }
+  .hero .eyebrow { margin-bottom: 22px; opacity: 0; animation: rise .7s .05s var(--ease) forwards; }
+  .hero h1 { font-family: Newsreader; font-weight: 500; font-size: clamp(40px, 6vw, 76px); line-height: 0.98; letter-spacing: -0.02em; margin: 0 0 24px;
     opacity: 0; animation: rise .8s .14s var(--ease) forwards; }
-  .hero h1 .cull { color: var(--cull); }
-  .hero p { color: var(--muted); font-size: 15.5px; line-height: 1.7; max-width: 52ch; margin: 0 0 30px;
+  .hero h1 em { font-style: italic; color: var(--cull); }
+  .hero p { color: var(--muted); font-size: 16.5px; line-height: 1.7; max-width: 46ch; margin: 0 0 32px;
     opacity: 0; animation: rise .8s .28s var(--ease) forwards; }
   .hero p b { color: var(--ink); font-weight: 500; }
-  @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-  .hero .cta-row { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; opacity: 0; animation: rise .8s .42s var(--ease) forwards; }
-  .pick-btn { background: var(--ink); color: var(--bg); border: 1px solid var(--ink); border-radius: 4px; font-size: 14px; font-weight: 500;
-    padding: 13px 24px; transition: background .25s var(--ease), color .25s var(--ease); }
+  @keyframes rise { from { opacity: 0; transform: translateY(11px); } to { opacity: 1; transform: translateY(0); } }
+  .cta-row { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; opacity: 0; animation: rise .8s .42s var(--ease) forwards; }
+  .pick-btn { background: var(--ink); color: var(--bg); border: 1px solid var(--ink); border-radius: 5px; font-family: "Hanken Grotesk"; font-size: 15px; font-weight: 600;
+    padding: 14px 26px; transition: background .25s var(--ease), color .25s var(--ease), transform .12s; }
   .pick-btn:hover { background: transparent; color: var(--ink); }
-  .landing-err { display: block; margin-top: 16px; color: var(--cull); font-size: 13px; min-height: 14px; }
+  .pick-btn:active { transform: translateY(1px); }
+  .landing-err { display: block; margin-top: 14px; color: var(--cull); font-size: 13px; min-height: 14px; }
+  .steps { margin-top: 30px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--faint); max-width: 48ch;
+    opacity: 0; animation: rise .8s .56s var(--ease) forwards; }
 
-  .hero-grid { width: 100%; max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 64px; align-items: center; }
-  .steps { margin-top: 32px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--faint); max-width: 52ch;
-    opacity: 0; animation: rise .8s .58s var(--ease) forwards; }
-  .preview { justify-self: end; opacity: 0; animation: rise .9s .5s var(--ease) forwards; }
-  .sheet { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; width: 360px; max-width: 40vw; }
-  .sheet .cell { aspect-ratio: 1; border: 1px solid var(--line); background: var(--raise); display: grid; place-items: center; }
-  .sheet .cell.now { border-color: var(--cull); background: var(--cull-bg); }
-  .sheet .ring { display: block; width: 34%; aspect-ratio: 1; color: var(--keep); }
-  .sheet .ex { display: block; width: 34%; aspect-ratio: 1; color: var(--cull); }
-  .sheet-cap { margin-top: 16px; text-align: right; color: var(--muted); }
-  @media (max-width: 940px){ .hero-grid { grid-template-columns: 1fr; } .preview { display: none; } .steps { max-width: none; } }
+  /* self-playing contact sheet */
+  .preview { justify-self: end; position: relative; opacity: 0; animation: rise .9s .5s var(--ease) forwards; }
+  .preview .loupe { position: absolute; inset: -10% -8%; z-index: -1; border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,246,224,0.9), transparent 62%); filter: blur(14px); }
+  .sheet { display: grid; grid-template-columns: repeat(5, 1fr); gap: 9px; width: 392px; max-width: 42vw; }
+  .sheet .cell { aspect-ratio: 1; border: 1px solid var(--line); background: var(--raise); display: grid; place-items: center; position: relative; overflow: hidden; }
+  .sheet .cell .m { display: block; width: 36%; aspect-ratio: 1; opacity: 0; transform: scale(0.5); transition: opacity .3s var(--ease), transform .3s var(--ease); }
+  .sheet .cell .m.in { opacity: 1; transform: scale(1); }
+  .sheet .cell .m.ring { color: var(--keep); } .sheet .cell .m.ex { color: var(--cull); }
+  .sheet .cell.scan { box-shadow: inset 0 0 0 1.5px var(--ink); }
+  .sheet .cell.scan::after { content: ""; position: absolute; inset: 0; background: rgba(33,30,23,0.05); }
+  .sheet-cap { margin-top: 18px; display: flex; justify-content: space-between; align-items: baseline; }
+  .sheet-cap .nums { display: flex; gap: 16px; }
+  .sheet-cap b { font-weight: 500; }
+  .sheet-cap .k { color: var(--keep); } .sheet-cap .c { color: var(--cull); }
+  @media (max-width: 940px){ .hero-grid { grid-template-columns: 1fr; } .preview { display: none; } .steps { max-width: none; } .land-body { padding-top: 4vh; } }
 
   /* ============ TOOL ============ */
   #tool { flex: 1; display: flex; flex-direction: column; min-height: 0; }
@@ -97,8 +107,8 @@
   .progress > div { height: 100%; width: 0; background: var(--ink); transition: width .35s var(--ease); }
   main.work { flex: 1; display: flex; flex-direction: column; min-height: 0; }
   .stage { flex: 1; position: relative; display: flex; align-items: center; justify-content: center; padding: 34px; min-height: 0; }
+  .stageglow { position: absolute; width: 60vmin; height: 60vmin; border-radius: 50%; background: radial-gradient(circle, rgba(255,247,228,0.7), transparent 64%); filter: blur(20px); pointer-events: none; }
   .mount { position: relative; padding: 10px; background: var(--raise); border: 1px solid var(--line); max-width: min(88vw,1020px); max-height: 100%; }
-  /* registration ticks on the frame corners */
   .mount span.rt { position: absolute; width: 8px; height: 8px; }
   .mount span.tl { top: -1px; left: -1px; border-top: 1px solid var(--cull); border-left: 1px solid var(--cull); }
   .mount span.tr { top: -1px; right: -1px; border-top: 1px solid var(--cull); border-right: 1px solid var(--cull); }
@@ -119,8 +129,8 @@
   @keyframes fadeMark { 0%{opacity:0;transform:translateY(6px)} 30%{opacity:1;transform:none} 100%{opacity:0;transform:translateY(-4px)} }
 
   .actions { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 22px 18px 10px; }
-  .verdict-btn { display: inline-flex; align-items: center; gap: 11px; background: transparent; border: 1px solid var(--line); border-radius: 4px;
-    padding: 12px 26px; font-size: 15px; font-weight: 500; transition: all .22s var(--ease); }
+  .verdict-btn { display: inline-flex; align-items: center; gap: 11px; background: transparent; border: 1px solid var(--line); border-radius: 5px;
+    padding: 12px 26px; font-size: 15px; font-weight: 600; transition: all .22s var(--ease); }
   .verdict-btn .m { width: 16px; height: 16px; }
   .verdict-btn.toss { color: var(--cull); } .verdict-btn.keep { color: var(--keep); }
   .verdict-btn.toss:hover { background: var(--cull-bg); border-color: var(--cull); }
@@ -137,14 +147,14 @@
   /* ============ SUMMARY ============ */
   #summary { flex: 1; overflow: auto; padding: 56px 40px; }
   .summary-inner { max-width: 880px; margin: 0 auto; }
-  #summary h2 { font-weight: 500; font-size: clamp(30px,4.5vw,46px); letter-spacing: -0.03em; margin: 0 0 6px; }
-  #summary h2 .cull { color: var(--cull); }
+  #summary h2 { font-family: Newsreader; font-weight: 500; font-size: clamp(34px,5vw,54px); letter-spacing: -0.02em; margin: 0 0 6px; }
+  #summary h2 em { font-style: italic; color: var(--cull); }
   #summary .sub { margin: 0 0 40px; }
   .tallies { display: flex; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin-bottom: 40px; }
   .tally { flex: 1; padding: 24px 0; }
   .tally:not(:last-child) { border-right: 1px solid var(--line); }
   .tally:not(:first-child) { padding-left: 26px; }
-  .tally .n { font-size: 46px; font-weight: 500; letter-spacing: -0.03em; line-height: 1; }
+  .tally .n { font-family: Newsreader; font-size: 50px; font-weight: 500; line-height: 1; }
   .tally.keep .n { color: var(--keep); } .tally.toss .n { color: var(--cull); }
   .tally .t { margin-top: 10px; }
   .block { margin-bottom: 36px; }
@@ -160,8 +170,7 @@
   .ln-btn:hover { border-color: var(--muted); background: var(--raise); }
   .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
   @media (max-width:760px){ .cols{grid-template-columns:1fr} }
-  .del-btn { color: var(--cull); border-color: var(--cull); }
-  .del-btn:hover { background: var(--cull-bg); }
+  .del-btn { color: var(--cull); border-color: var(--cull); } .del-btn:hover { background: var(--cull-bg); }
   .foot { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
   .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg);
     font-family: "DM Mono", monospace; font-size: 12px; letter-spacing: 0.08em; padding: 11px 18px; border-radius: 5px;
@@ -170,6 +179,7 @@
 </style>
 </head>
 <body class="ticks">
+<div id="app">
 
 <!-- ============ LANDING ============ -->
 <section id="landing">
@@ -180,9 +190,9 @@
   <div class="land-body">
     <div class="hero-grid">
       <div class="hero">
-        <div class="eyebrow micro">Image triage</div>
-        <h1>Keep what works.<br/><span class="cull">Cull</span> the rest.</h1>
-        <p>Step through a folder of images one frame at a time. Walk away with a delete list ready for Claude, or <b>remove the rejects yourself</b>. It all happens in your browser; nothing is ever uploaded.</p>
+        <div class="eyebrow micro">Image triage · in your browser</div>
+        <h1>Keep what works.<br/><em>Cull</em> the rest.</h1>
+        <p>A calm bench for clearing out a folder of images. Mark each frame, then walk away with a delete list ready for Claude, or <b>remove the rejects yourself</b>. Nothing is ever uploaded.</p>
         <div class="cta-row">
           <button class="pick-btn" id="pick-btn">Choose a folder</button>
           <span class="micro">No server · reads off your disk</span>
@@ -191,13 +201,12 @@
         <div class="steps micro">Pick a folder &nbsp;→&nbsp; mark each frame &nbsp;→&nbsp; copy a prompt, or cull on the spot</div>
       </div>
       <div class="preview" aria-hidden="true">
-        <div class="sheet">
-          <div class="cell"><span class="ring"></span></div><div class="cell"></div><div class="cell"><span class="ex"></span></div><div class="cell"><span class="ring"></span></div>
-          <div class="cell"></div><div class="cell"><span class="ring"></span></div><div class="cell now"></div><div class="cell"><span class="ex"></span></div>
-          <div class="cell"><span class="ex"></span></div><div class="cell"><span class="ring"></span></div><div class="cell"></div><div class="cell"><span class="ring"></span></div>
-          <div class="cell"><span class="ring"></span></div><div class="cell"><span class="ex"></span></div><div class="cell"></div><div class="cell"></div>
+        <div class="loupe"></div>
+        <div class="sheet" id="demo-sheet"></div>
+        <div class="sheet-cap micro">
+          <span>contact sheet</span>
+          <span class="nums"><b class="k" id="demo-k">0 kept</b> <b class="c" id="demo-c">0 culled</b></span>
         </div>
-        <div class="sheet-cap micro">16 frames · <span style="color:var(--keep)">6 kept</span> · <span style="color:var(--cull)">4 culled</span></div>
       </div>
     </div>
   </div>
@@ -213,6 +222,7 @@
   <div class="progress"><div id="progress-bar"></div></div>
   <main class="work">
     <div class="stage">
+      <div class="stageglow"></div>
       <div class="mount"><span class="rt tl"></span><span class="rt tr"></span><span class="rt bl"></span><span class="rt br"></span>
         <div id="frame" class="frame bg-checker"><img id="img" alt="" /></div></div>
       <div id="stamp" class="stamp"></div>
@@ -235,7 +245,7 @@
 <!-- ============ SUMMARY ============ -->
 <section id="summary" class="hidden">
   <div class="summary-inner">
-    <h2>The <span class="cull">final cut</span></h2>
+    <h2>The <em>final cut</em></h2>
     <p id="summary-sub" class="sub micro"></p>
     <div class="tallies">
       <div class="tally keep"><div id="t-keep" class="n">0</div><div class="t micro">Kept</div></div>
@@ -274,6 +284,7 @@
   </div>
 </section>
 
+</div>
 <div id="toast" class="toast"></div>
 
 <script>
@@ -291,6 +302,35 @@
 
   let images = [], idx = 0, verdicts = {}, bgIndex = 0, queue = null, dirHandle = null;
 
+  /* ---- self-playing hero demo ---- */
+  const DEMO = ["keep","cull","keep","keep","cull","cull","keep","keep","cull","keep","keep","cull","keep","cull","keep","keep","cull","keep","keep","cull"];
+  let demoCells = [], demoTimer = null, demoI = 0;
+  function buildDemo() {
+    const sheet = $("demo-sheet");
+    DEMO.forEach(() => { const c = document.createElement("div"); c.className = "cell";
+      const m = document.createElement("span"); m.className = "m"; c.appendChild(m); sheet.appendChild(c); });
+    demoCells = Array.from(sheet.children);
+    demoStep();
+  }
+  function demoStep() {
+    if (demoI < DEMO.length) {
+      demoCells.forEach((c, j) => c.classList.toggle("scan", j === demoI));
+      const v = DEMO[demoI], m = demoCells[demoI].firstChild;
+      m.className = "m in " + (v === "keep" ? "ring" : "ex");
+      let k = 0, c = 0; for (let j = 0; j <= demoI; j++) (DEMO[j] === "keep" ? k++ : c++);
+      $("demo-k").textContent = k + " kept"; $("demo-c").textContent = c + " culled";
+      demoI++;
+      demoTimer = setTimeout(demoStep, demoI === 1 ? 700 : 440);
+    } else {
+      demoCells.forEach((c) => c.classList.remove("scan"));
+      demoTimer = setTimeout(() => {
+        demoCells.forEach((c) => { c.firstChild.className = "m"; });
+        $("demo-k").textContent = "0 kept"; $("demo-c").textContent = "0 culled"; demoI = 0; demoStep();
+      }, 2600);
+    }
+  }
+  function stopDemo() { if (demoTimer) { clearTimeout(demoTimer); demoTimer = null; } }
+
   function loadVerdicts() { try { verdicts = JSON.parse(localStorage.getItem(LS_KEY)) || {}; } catch { verdicts = {}; } }
   function saveVerdicts() { try { localStorage.setItem(LS_KEY, JSON.stringify(verdicts)); } catch {} }
   function show(name) { for (const k in screens) screens[k].classList.toggle("hidden", k !== name); }
@@ -299,7 +339,7 @@
     if (entries.length === 0) { $("landing-err").textContent = "No images in that folder. Pick one with image files."; return; }
     entries.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
     images.forEach(i => URL.revokeObjectURL(i.url));
-    images = entries; loadVerdicts(); queue = null; idx = firstUnreviewedIndex(); show("tool"); render();
+    images = entries; loadVerdicts(); queue = null; idx = firstUnreviewedIndex(); stopDemo(); show("tool"); render();
   }
   $("pick-btn").addEventListener("click", async () => {
     $("landing-err").textContent = "";
@@ -444,6 +484,8 @@
       case "b": case "B": e.preventDefault(); cycleBg(); break;
     }
   });
+
+  buildDemo();
 })();
 </script>
 </body>
