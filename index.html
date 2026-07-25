@@ -2,490 +2,580 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Cull — a calm bench for clearing out a folder of images</title>
-<meta name="description" content="Step through a folder of images, keep what works and cull the rest, then take a delete list to Claude — or remove the rejects yourself. Entirely in your browser; nothing is uploaded." />
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23f1ece1'/%3E%3Ccircle cx='11' cy='16' r='4.5' fill='none' stroke='%235f7a52' stroke-width='1.7'/%3E%3Cpath d='M18 12 L25 20 M25 12 L18 20' stroke='%23b75640' stroke-width='1.7' fill='none'/%3E%3C/svg%3E" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Cull — one folder, two arrows</title>
+<meta name="description" content="Open a folder of photos and send each one left or right. Each arrow can delete, keep, or move to a folder. Runs entirely in your browser." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230e0f11'/%3E%3Cpath d='M13 10 L8 16 L13 22' fill='none' stroke='%23c8664a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M19 10 L24 16 L19 22' fill='none' stroke='%2363ac86' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=Hanken+Grotesk:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;450;500&display=swap" rel="stylesheet" />
 <style>
   :root {
-    --bg: #f1ece1;
-    --raise: #f8f4ea;
-    --ink: #211e17;
-    --muted: #837c6b;
-    --faint: #b0a895;
-    --line: #ddd5c4;
-    --keep: #5f7a52;
-    --cull: #b75640;
-    --keep-bg: #e9ecdf;
-    --cull-bg: #f3e3dc;
-    --ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --page: #0e0f11;
+    --surface: #16181c;
+    --raised: #1e2126;
+    --line: #272b31;
+    --text: #ebe9e4;
+    --dim: #8a9098;
+    --faint: #575d66;
+    --left: #c8664a;
+    --right: #63ac86;
+    --left-soft: rgba(200, 102, 74, 0.13);
+    --right-soft: rgba(99, 172, 134, 0.13);
+    --snap: 180ms cubic-bezier(0.2, 0, 0, 1);
+    --mono: "IBM Plex Mono", ui-monospace, monospace;
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body {
-    background: var(--bg); color: var(--ink);
-    font-family: "Hanken Grotesk", system-ui, sans-serif;
-    font-size: 15px; line-height: 1.55;
-    display: flex; flex-direction: column; overflow: hidden; position: relative;
-    -webkit-font-smoothing: antialiased;
+    background: var(--page); color: var(--text); overflow: hidden;
+    font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 15px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased; display: flex; flex-direction: column;
   }
-  /* warm grain + loupe atmosphere */
-  body::before { content: ""; position: fixed; inset: 0; z-index: 1; pointer-events: none; opacity: 0.04; mix-blend-mode: multiply;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
-  button { font-family: inherit; cursor: pointer; color: inherit; }
+  button { font: inherit; color: inherit; background: none; border: none; padding: 0; cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--right); outline-offset: 3px; }
   .hidden { display: none !important; }
-  .serif { font-family: Newsreader, Georgia, serif; }
-  .mono { font-family: "DM Mono", ui-monospace, monospace; }
-  .micro { font-family: "DM Mono", monospace; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
-  ::selection { background: var(--ink); color: var(--bg); }
-  kbd { font-family: "DM Mono", monospace; font-size: 11px; border: 1px solid var(--line); border-radius: 3px; padding: 1px 6px; color: var(--muted); }
+  .tag { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
+  kbd { font-family: var(--mono); font-size: 10.5px; color: var(--dim); border: 1px solid var(--line); border-radius: 3px; padding: 1px 5px; }
+  ::selection { background: var(--text); color: var(--page); }
 
-  .ring { border: 1.6px solid currentColor; border-radius: 50%; }
-  .ex { position: relative; }
-  .ex::before, .ex::after { content: ""; position: absolute; top: 50%; left: 0; right: 0; height: 1.6px; background: currentColor; }
-  .ex::before { transform: rotate(45deg); } .ex::after { transform: rotate(-45deg); }
-  .ticks::before, .ticks::after { content: ""; position: fixed; width: 11px; height: 11px; pointer-events: none; z-index: 4; }
-  .ticks::before { top: 18px; left: 18px; border-top: 1px solid var(--faint); border-left: 1px solid var(--faint); }
-  .ticks::after { bottom: 18px; right: 18px; border-bottom: 1px solid var(--faint); border-right: 1px solid var(--faint); }
-  #app { position: relative; z-index: 2; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .btn {
+    font-family: var(--mono); font-size: 13px; border: 1px solid var(--line); border-radius: 7px;
+    padding: 11px 20px; background: var(--surface); transition: border-color var(--snap), background var(--snap);
+  }
+  .btn:hover { border-color: var(--faint); background: var(--raised); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn.big { background: var(--text); color: var(--page); border-color: var(--text); font-size: 15px; padding: 15px 30px; }
+  .btn.big:hover { background: #fff; border-color: #fff; }
+  .link { font-family: var(--mono); font-size: 12.5px; color: var(--dim); padding: 8px 10px; border-radius: 5px; transition: color var(--snap), background var(--snap); }
+  .link:hover { color: var(--text); background: var(--surface); }
 
-  /* ============ LANDING ============ */
-  #landing { flex: 1; position: relative; display: flex; flex-direction: column; overflow: hidden; }
-  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 24px 40px; }
-  .wordmark { font-weight: 600; font-size: 16px; }
-  .wordmark .d { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--keep); margin-right: 8px; vertical-align: 1px; }
-  .status { display: flex; align-items: center; gap: 9px; }
-  .status .live { width: 5px; height: 5px; border-radius: 50%; background: var(--keep); animation: soft 3s ease-in-out infinite; }
-  @keyframes soft { 0%,100%{opacity:.35} 50%{opacity:1} }
+  /* ---------- home ---------- */
+  #home { flex: 1; display: grid; place-items: center; padding: 24px; text-align: center; }
+  #home h1 { font-weight: 450; font-size: clamp(26px, 5vw, 38px); letter-spacing: -0.02em; margin: 0 0 28px; }
+  #home .sub { color: var(--dim); margin: 22px 0 0; font-size: 14px; }
+  #home .mark { display: block; margin: 0 auto 26px; }
+  #err { display: block; margin-top: 16px; min-height: 18px; font-family: var(--mono); font-size: 12.5px; color: var(--left); }
 
-  .land-body { flex: 1; min-height: 0; display: flex; align-items: center; padding: 0 40px; }
-  .hero-grid { width: 100%; max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 1.02fr 0.98fr; gap: 70px; align-items: center; }
-  .hero .eyebrow { margin-bottom: 22px; opacity: 0; animation: rise .7s .05s var(--ease) forwards; }
-  .hero h1 { font-family: Newsreader; font-weight: 500; font-size: clamp(40px, 6vw, 76px); line-height: 0.98; letter-spacing: -0.02em; margin: 0 0 24px;
-    opacity: 0; animation: rise .8s .14s var(--ease) forwards; }
-  .hero h1 em { font-style: italic; color: var(--cull); }
-  .hero p { color: var(--muted); font-size: 16.5px; line-height: 1.7; max-width: 46ch; margin: 0 0 32px;
-    opacity: 0; animation: rise .8s .28s var(--ease) forwards; }
-  .hero p b { color: var(--ink); font-weight: 500; }
-  @keyframes rise { from { opacity: 0; transform: translateY(11px); } to { opacity: 1; transform: translateY(0); } }
-  .cta-row { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; opacity: 0; animation: rise .8s .42s var(--ease) forwards; }
-  .pick-btn { background: var(--ink); color: var(--bg); border: 1px solid var(--ink); border-radius: 5px; font-family: "Hanken Grotesk"; font-size: 15px; font-weight: 600;
-    padding: 14px 26px; transition: background .25s var(--ease), color .25s var(--ease), transform .12s; }
-  .pick-btn:hover { background: transparent; color: var(--ink); }
-  .pick-btn:active { transform: translateY(1px); }
-  .landing-err { display: block; margin-top: 14px; color: var(--cull); font-size: 13px; min-height: 14px; }
-  .steps { margin-top: 30px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--faint); max-width: 48ch;
-    opacity: 0; animation: rise .8s .56s var(--ease) forwards; }
+  /* ---------- deck ---------- */
+  #deck { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .top { display: flex; align-items: center; gap: 14px; padding: 12px 18px; flex: none; }
+  .top .n { font-family: var(--mono); font-size: 13px; }
+  .top .n span { color: var(--faint); }
+  .top .f { font-family: var(--mono); font-size: 12px; color: var(--dim); margin-left: auto;
+    max-width: 42vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; }
+  .bar { height: 2px; background: var(--line); flex: none; }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--text); transition: width 300ms cubic-bezier(0.2, 0, 0, 1); }
+  .stage { flex: 1; display: grid; place-items: center; padding: 22px; min-height: 0; overflow: hidden; position: relative; touch-action: pan-y; }
+  #plate { max-width: 100%; max-height: 100%; display: flex; transition: transform var(--snap), opacity var(--snap); }
+  #plate img { display: block; max-width: min(94vw, 1200px); max-height: 100%; object-fit: contain; border-radius: 2px; }
+  #plate.drag { transition: none; }
+  #plate.gone-l { transform: translateX(-34vw) rotate(-3deg); opacity: 0; }
+  #plate.gone-r { transform: translateX(34vw) rotate(3deg); opacity: 0; }
+  .wash { position: absolute; top: 0; bottom: 0; width: 32%; opacity: 0; pointer-events: none; transition: opacity var(--snap); }
+  .wash.l { left: 0; background: linear-gradient(90deg, var(--left-soft), transparent); }
+  .wash.r { right: 0; background: linear-gradient(270deg, var(--right-soft), transparent); }
+  .wash.on { opacity: 1; }
 
-  /* self-playing contact sheet */
-  .preview { justify-self: end; position: relative; opacity: 0; animation: rise .9s .5s var(--ease) forwards; }
-  .preview .loupe { position: absolute; inset: -10% -8%; z-index: -1; border-radius: 50%;
-    background: radial-gradient(circle, rgba(255,246,224,0.9), transparent 62%); filter: blur(14px); }
-  .sheet { display: grid; grid-template-columns: repeat(5, 1fr); gap: 9px; width: 392px; max-width: 42vw; }
-  .sheet .cell { aspect-ratio: 1; border: 1px solid var(--line); background: var(--raise); display: grid; place-items: center; position: relative; overflow: hidden; }
-  .sheet .cell .m { display: block; width: 36%; aspect-ratio: 1; opacity: 0; transform: scale(0.5); transition: opacity .3s var(--ease), transform .3s var(--ease); }
-  .sheet .cell .m.in { opacity: 1; transform: scale(1); }
-  .sheet .cell .m.ring { color: var(--keep); } .sheet .cell .m.ex { color: var(--cull); }
-  .sheet .cell.scan { box-shadow: inset 0 0 0 1.5px var(--ink); }
-  .sheet .cell.scan::after { content: ""; position: absolute; inset: 0; background: rgba(33,30,23,0.05); }
-  .sheet-cap { margin-top: 18px; display: flex; justify-content: space-between; align-items: baseline; }
-  .sheet-cap .nums { display: flex; gap: 16px; }
-  .sheet-cap b { font-weight: 500; }
-  .sheet-cap .k { color: var(--keep); } .sheet-cap .c { color: var(--cull); }
-  @media (max-width: 940px){ .hero-grid { grid-template-columns: 1fr; } .preview { display: none; } .steps { max-width: none; } .land-body { padding-top: 4vh; } }
+  .strip { display: flex; justify-content: center; gap: 5px; padding: 10px 18px 4px; flex: none; min-height: 46px; }
+  .thumb { width: 34px; height: 34px; border-radius: 4px; overflow: hidden; border: 1px solid var(--line);
+    opacity: 0.4; position: relative; transition: opacity var(--snap), border-color var(--snap), transform var(--snap); }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumb:hover { opacity: 0.75; }
+  .thumb.now { opacity: 1; border-color: var(--text); transform: scale(1.16); }
+  .thumb i { position: absolute; inset: auto 0 0 0; height: 3px; display: block; }
+  .thumb i.l { background: var(--left); } .thumb i.r { background: var(--right); }
 
-  /* ============ TOOL ============ */
-  #tool { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-  header.bar { display: flex; align-items: center; gap: 18px; padding: 18px 28px; border-bottom: 1px solid var(--line); }
-  header.bar .wordmark { font-size: 14px; }
-  header.bar .counter { font-family: "DM Mono", monospace; font-size: 12px; letter-spacing: 0.12em; color: var(--muted); }
-  header.bar .filename { margin-left: auto; font-family: "DM Mono", monospace; font-size: 12px; color: var(--muted); max-width: 44vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .progress { height: 1px; background: var(--line); }
-  .progress > div { height: 100%; width: 0; background: var(--ink); transition: width .35s var(--ease); }
-  main.work { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-  .stage { flex: 1; position: relative; display: flex; align-items: center; justify-content: center; padding: 34px; min-height: 0; }
-  .stageglow { position: absolute; width: 60vmin; height: 60vmin; border-radius: 50%; background: radial-gradient(circle, rgba(255,247,228,0.7), transparent 64%); filter: blur(20px); pointer-events: none; }
-  .mount { position: relative; padding: 10px; background: var(--raise); border: 1px solid var(--line); max-width: min(88vw,1020px); max-height: 100%; }
-  .mount span.rt { position: absolute; width: 8px; height: 8px; }
-  .mount span.tl { top: -1px; left: -1px; border-top: 1px solid var(--cull); border-left: 1px solid var(--cull); }
-  .mount span.tr { top: -1px; right: -1px; border-top: 1px solid var(--cull); border-right: 1px solid var(--cull); }
-  .mount span.bl { bottom: -1px; left: -1px; border-bottom: 1px solid var(--cull); border-left: 1px solid var(--cull); }
-  .mount span.br { bottom: -1px; right: -1px; border-bottom: 1px solid var(--cull); border-right: 1px solid var(--cull); }
-  .frame { display: flex; align-items: center; justify-content: center; }
-  .frame img { display: block; max-width: min(80vw,940px); max-height: 56vh; object-fit: contain; }
-  .bg-checker { background-color:#fff; background-image:
-      linear-gradient(45deg,#e2e2e2 25%,transparent 25%),linear-gradient(-45deg,#e2e2e2 25%,transparent 25%),
-      linear-gradient(45deg,transparent 75%,#e2e2e2 75%),linear-gradient(-45deg,transparent 75%,#e2e2e2 75%);
-    background-size: 20px 20px; background-position:0 0,0 10px,10px -10px,-10px 0; }
-  .bg-paper{background:var(--raise)} .bg-light{background:#fff} .bg-dark{background:#26241d}
+  .choices { display: flex; gap: 10px; padding: 6px 18px 0; flex: none; }
+  .choice {
+    flex: 1; border: 1px solid var(--line); border-radius: 9px; background: var(--surface);
+    padding: 16px 18px; display: flex; align-items: center; gap: 13px; min-width: 0;
+    transition: border-color var(--snap), background var(--snap);
+  }
+  .choice .arrow { font-family: var(--mono); font-size: 17px; flex: none; }
+  .choice .what { font-family: var(--mono); font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .choice.l { justify-content: flex-start; } .choice.l .arrow { color: var(--left); }
+  .choice.r { justify-content: flex-end; flex-direction: row-reverse; } .choice.r .arrow { color: var(--right); }
+  .choice.l:hover, .choice.l.on { border-color: var(--left); background: var(--left-soft); }
+  .choice.r:hover, .choice.r.on { border-color: var(--right); background: var(--right-soft); }
+  .under { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 12px 18px 16px; flex: none; }
+  @media (max-width: 620px) {
+    .choice { padding: 14px; } .choice .what { font-size: 13.5px; }
+    .top .f { max-width: 36vw; } .thumb { width: 28px; height: 28px; }
+  }
 
-  .stamp { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; z-index: 6; opacity: 0; }
-  .stampmark { font-family: "DM Mono", monospace; font-size: 15px; letter-spacing: 0.22em; text-transform: uppercase; padding: 8px 16px; background: var(--bg); border: 1px solid currentColor; }
-  .stamp.keep .stampmark { color: var(--keep); } .stamp.toss .stampmark { color: var(--cull); }
-  .stamp.run { animation: fadeMark .55s var(--ease); }
-  @keyframes fadeMark { 0%{opacity:0;transform:translateY(6px)} 30%{opacity:1;transform:none} 100%{opacity:0;transform:translateY(-4px)} }
+  /* ---------- sheet ---------- */
+  #sheet { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 20px;
+    background: rgba(8, 9, 10, 0.72); }
+  .card { width: 100%; max-width: 460px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 26px; }
+  .card h2 { font-weight: 450; font-size: 19px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .card .hint { color: var(--dim); font-size: 13.5px; margin: 0 0 22px; }
+  .set { margin-bottom: 18px; }
+  .set > .tag { display: block; margin-bottom: 8px; }
+  .opts { display: flex; gap: 7px; }
+  .opt { flex: 1; border: 1px solid var(--line); border-radius: 7px; padding: 11px 6px; font-family: var(--mono); font-size: 12.5px;
+    text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: border-color var(--snap), background var(--snap), color var(--snap); }
+  .opt:hover { border-color: var(--faint); }
+  .set.l .opt.on { border-color: var(--left); background: var(--left-soft); color: var(--text); }
+  .set.r .opt.on { border-color: var(--right); background: var(--right-soft); color: var(--text); }
+  .card .foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 24px; }
+  #sheet-err { font-family: var(--mono); font-size: 12px; color: var(--left); min-height: 16px; margin-top: 4px; }
 
-  .actions { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 22px 18px 10px; }
-  .verdict-btn { display: inline-flex; align-items: center; gap: 11px; background: transparent; border: 1px solid var(--line); border-radius: 5px;
-    padding: 12px 26px; font-size: 15px; font-weight: 600; transition: all .22s var(--ease); }
-  .verdict-btn .m { width: 16px; height: 16px; }
-  .verdict-btn.toss { color: var(--cull); } .verdict-btn.keep { color: var(--keep); }
-  .verdict-btn.toss:hover { background: var(--cull-bg); border-color: var(--cull); }
-  .verdict-btn.keep:hover { background: var(--keep-bg); border-color: var(--keep); }
-  .verdict-btn.marked.toss { background: var(--cull-bg); border-color: var(--cull); }
-  .verdict-btn.marked.keep { background: var(--keep-bg); border-color: var(--keep); }
-  .sep { width: 1px; height: 26px; background: var(--line); margin: 0 6px; }
-  .txt-btn { background: transparent; border: none; color: var(--muted); font-family: "DM Mono", monospace; font-size: 12px; letter-spacing: 0.06em;
-    padding: 8px 10px; border-radius: 4px; transition: color .2s, background .2s; }
-  .txt-btn:hover { color: var(--ink); background: var(--raise); }
-  .hints { text-align: center; padding-bottom: 18px; }
-  .hints .micro { color: var(--faint); }
+  /* ---------- done ---------- */
+  #done { flex: 1; display: grid; place-items: center; padding: 24px; text-align: center; }
+  .done-inner { width: 100%; max-width: 480px; }
+  #done h1 { font-weight: 450; font-size: 30px; letter-spacing: -0.02em; margin: 0 0 10px; }
+  #tally { color: var(--dim); font-family: var(--mono); font-size: 13px; margin: 0 0 30px; line-height: 2; }
+  #tally b { color: var(--text); font-weight: 500; }
+  .done-row { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  #run-status { font-family: var(--mono); font-size: 12.5px; color: var(--dim); min-height: 20px; margin-top: 14px; }
+  #done .others { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--line); display: flex; justify-content: center; gap: 4px; flex-wrap: wrap; }
 
-  /* ============ SUMMARY ============ */
-  #summary { flex: 1; overflow: auto; padding: 56px 40px; }
-  .summary-inner { max-width: 880px; margin: 0 auto; }
-  #summary h2 { font-family: Newsreader; font-weight: 500; font-size: clamp(34px,5vw,54px); letter-spacing: -0.02em; margin: 0 0 6px; }
-  #summary h2 em { font-style: italic; color: var(--cull); }
-  #summary .sub { margin: 0 0 40px; }
-  .tallies { display: flex; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin-bottom: 40px; }
-  .tally { flex: 1; padding: 24px 0; }
-  .tally:not(:last-child) { border-right: 1px solid var(--line); }
-  .tally:not(:first-child) { padding-left: 26px; }
-  .tally .n { font-family: Newsreader; font-size: 50px; font-weight: 500; line-height: 1; }
-  .tally.keep .n { color: var(--keep); } .tally.toss .n { color: var(--cull); }
-  .tally .t { margin-top: 10px; }
-  .block { margin-bottom: 36px; }
-  .block .head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-  .block .head .dot { width: 8px; height: 8px; border-radius: 50%; } .dot.toss{background:var(--cull)} .dot.keep{background:var(--keep)} .dot.acc{background:var(--ink)}
-  textarea { width: 100%; background: var(--raise); color: var(--ink); border: 1px solid var(--line); border-radius: 5px;
-    padding: 15px; font: 13px/1.7 "DM Mono", monospace; resize: vertical; }
-  .prompt-box textarea { height: 200px; }
-  .col textarea { height: 170px; }
-  .acts { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
-  .ln-btn { background: transparent; border: 1px solid var(--line); border-radius: 4px; color: var(--ink); font-family: "DM Mono", monospace; font-size: 12px;
-    padding: 9px 15px; transition: border-color .2s, background .2s; }
-  .ln-btn:hover { border-color: var(--muted); background: var(--raise); }
-  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
-  @media (max-width:760px){ .cols{grid-template-columns:1fr} }
-  .del-btn { color: var(--cull); border-color: var(--cull); } .del-btn:hover { background: var(--cull-bg); }
-  .foot { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-  .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg);
-    font-family: "DM Mono", monospace; font-size: 12px; letter-spacing: 0.08em; padding: 11px 18px; border-radius: 5px;
-    opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 100; }
-  .toast.show { opacity: 1; }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(6px);
+    background: var(--raised); border: 1px solid var(--line); font-family: var(--mono); font-size: 12.5px;
+    padding: 10px 16px; border-radius: 7px; opacity: 0; pointer-events: none;
+    transition: opacity var(--snap), transform var(--snap); z-index: 50; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 1ms !important; } }
 </style>
 </head>
-<body class="ticks">
-<div id="app">
+<body>
 
-<!-- ============ LANDING ============ -->
-<section id="landing">
-  <div class="topbar">
-    <span class="wordmark"><span class="d"></span>Cull</span>
-    <span class="status micro"><span class="live"></span> 100% local · no upload</span>
-  </div>
-  <div class="land-body">
-    <div class="hero-grid">
-      <div class="hero">
-        <div class="eyebrow micro">Image triage · in your browser</div>
-        <h1>Keep what works.<br/><em>Cull</em> the rest.</h1>
-        <p>A calm bench for clearing out a folder of images. Mark each frame, then walk away with a delete list ready for Claude, or <b>remove the rejects yourself</b>. Nothing is ever uploaded.</p>
-        <div class="cta-row">
-          <button class="pick-btn" id="pick-btn">Choose a folder</button>
-          <span class="micro">No server · reads off your disk</span>
-        </div>
-        <span id="landing-err" class="landing-err"></span>
-        <div class="steps micro">Pick a folder &nbsp;→&nbsp; mark each frame &nbsp;→&nbsp; copy a prompt, or cull on the spot</div>
-      </div>
-      <div class="preview" aria-hidden="true">
-        <div class="loupe"></div>
-        <div class="sheet" id="demo-sheet"></div>
-        <div class="sheet-cap micro">
-          <span>contact sheet</span>
-          <span class="nums"><b class="k" id="demo-k">0 kept</b> <b class="c" id="demo-c">0 culled</b></span>
-        </div>
-      </div>
-    </div>
+<!-- ============ HOME ============ -->
+<section id="home">
+  <div>
+    <svg class="mark" width="46" height="46" viewBox="0 0 32 32" aria-hidden="true">
+      <path d="M13 9 L7 16 L13 23" fill="none" stroke="#c8664a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M19 9 L25 16 L19 23" fill="none" stroke="#63ac86" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <h1>Open a folder of photos.</h1>
+    <button class="btn big" id="open">Open folder</button>
+    <span id="err"></span>
+    <p class="sub">Send each photo left or right. You pick what the arrows do.<br />Nothing leaves your computer.</p>
   </div>
 </section>
 
-<!-- ============ TOOL ============ -->
-<div id="tool" class="hidden">
-  <header class="bar">
-    <span class="wordmark"><span class="d"></span>Cull</span>
-    <span id="counter" class="counter"></span>
-    <span id="filename" class="filename"></span>
-  </header>
-  <div class="progress"><div id="progress-bar"></div></div>
-  <main class="work">
-    <div class="stage">
-      <div class="stageglow"></div>
-      <div class="mount"><span class="rt tl"></span><span class="rt tr"></span><span class="rt bl"></span><span class="rt br"></span>
-        <div id="frame" class="frame bg-checker"><img id="img" alt="" /></div></div>
-      <div id="stamp" class="stamp"></div>
-    </div>
-    <div class="actions">
-      <button class="verdict-btn toss" id="btn-toss" title="Cull (←)"><span class="m ex"></span> Cull</button>
-      <div style="display:flex;align-items:center;gap:4px">
-        <button class="txt-btn" id="btn-undo" title="Undo (Z)">undo</button>
-        <span class="sep"></span>
-        <button class="txt-btn" id="btn-bg" title="Backdrop (B)"><span id="bg-name">checker</span></button>
-        <span class="sep"></span>
-        <button class="txt-btn" id="btn-finish" title="Summary">summary</button>
-      </div>
-      <button class="verdict-btn keep" id="btn-keep" title="Keep (→)"><span class="m ring"></span> Keep</button>
-    </div>
-    <div class="hints"><span class="micro"><kbd>←</kbd> cull &nbsp; <kbd>→</kbd> keep &nbsp; <kbd>Z</kbd> undo &nbsp; <kbd>B</kbd> backdrop</span></div>
-  </main>
-</div>
+<!-- ============ DECK ============ -->
+<section id="deck" class="hidden">
+  <div class="top">
+    <span class="n" id="n"></span>
+    <span class="f" id="f"></span>
+  </div>
+  <div class="bar"><i id="bar"></i></div>
+  <div class="stage" id="stage">
+    <span class="wash l" id="wash-l"></span>
+    <span class="wash r" id="wash-r"></span>
+    <div id="plate"><img id="shot" alt="" /></div>
+  </div>
+  <div class="strip" id="strip"></div>
+  <div class="choices">
+    <button class="choice l" id="go-l"><span class="arrow">←</span><span class="what" id="what-l">Delete</span></button>
+    <button class="choice r" id="go-r"><span class="arrow">→</span><span class="what" id="what-r">Keep</span></button>
+  </div>
+  <div class="under">
+    <button class="link" id="undo">undo</button>
+    <button class="link" id="settings">change what the arrows do</button>
+    <button class="link" id="finish">finish</button>
+  </div>
+</section>
 
-<!-- ============ SUMMARY ============ -->
-<section id="summary" class="hidden">
-  <div class="summary-inner">
-    <h2>The <em>final cut</em></h2>
-    <p id="summary-sub" class="sub micro"></p>
-    <div class="tallies">
-      <div class="tally keep"><div id="t-keep" class="n">0</div><div class="t micro">Kept</div></div>
-      <div class="tally toss"><div id="t-toss" class="n">0</div><div class="t micro">Culled</div></div>
-      <div class="tally"><div id="t-left" class="n">0</div><div class="t micro">Unmarked</div></div>
-    </div>
-    <div class="block prompt-box">
-      <div class="head"><span class="dot acc"></span><span class="micro" style="color:var(--ink)">Delete prompt — paste into Claude Code</span></div>
-      <textarea id="del-prompt" readonly></textarea>
-      <div class="acts"><button class="ln-btn" id="copy-prompt">Copy prompt</button></div>
-    </div>
-    <div class="cols">
-      <div class="col block">
-        <div class="head"><span class="dot toss"></span><span class="micro" style="color:var(--ink)">Culled <span id="toss-count"></span></span></div>
-        <textarea id="toss-list" readonly></textarea>
-        <div class="acts">
-          <button class="ln-btn del-btn hidden" id="delete-now">Delete these now</button>
-          <button class="ln-btn" id="copy-toss">Copy list</button>
-          <button class="ln-btn" id="dl-toss">Download</button>
-        </div>
-      </div>
-      <div class="col block">
-        <div class="head"><span class="dot keep"></span><span class="micro" style="color:var(--ink)">Kept <span id="keep-count"></span></span></div>
-        <textarea id="keep-list" readonly></textarea>
-        <div class="acts">
-          <button class="ln-btn" id="copy-keep">Copy list</button>
-          <button class="ln-btn" id="dl-keep">Download</button>
-        </div>
+<!-- ============ SHEET ============ -->
+<div id="sheet" class="hidden">
+  <div class="card" role="dialog" aria-modal="true" aria-label="What the arrows do">
+    <h2>What should the arrows do?</h2>
+    <p class="hint">Nothing happens to a file until you press the button at the end.</p>
+    <div class="set l">
+      <span class="tag">← Left</span>
+      <div class="opts">
+        <button class="opt" data-side="l" data-act="delete">Delete</button>
+        <button class="opt" data-side="l" data-act="keep">Keep</button>
+        <button class="opt" data-side="l" data-act="move" id="move-l">Move to…</button>
       </div>
     </div>
+    <div class="set r">
+      <span class="tag">Right →</span>
+      <div class="opts">
+        <button class="opt" data-side="r" data-act="delete">Delete</button>
+        <button class="opt" data-side="r" data-act="keep">Keep</button>
+        <button class="opt" data-side="r" data-act="move" id="move-r">Move to…</button>
+      </div>
+    </div>
+    <div id="sheet-err"></div>
     <div class="foot">
-      <button class="ln-btn" id="re-review">Step through again</button>
-      <button class="ln-btn" id="review-toss-only">Re-review the culled</button>
-      <button class="ln-btn" id="start-over">Clear all marks</button>
+      <span class="tag" id="sheet-note"></span>
+      <button class="btn" id="sheet-close">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ DONE ============ -->
+<section id="done" class="hidden">
+  <div class="done-inner">
+    <h1 id="done-h">All decided.</h1>
+    <p id="tally"></p>
+    <div class="done-row">
+      <button class="btn big" id="run">Apply</button>
+      <button class="link" id="copy">copy the list instead</button>
+    </div>
+    <div id="run-status"></div>
+    <div class="others">
+      <button class="link" id="back">back to photos</button>
+      <button class="link" id="restart">start over</button>
     </div>
   </div>
 </section>
 
-</div>
-<div id="toast" class="toast"></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <script>
 (() => {
   "use strict";
-  const LS_KEY = "cull-triage-v1";
+
   const IMG_RE = /\.(png|jpe?g|gif|webp|avif|bmp|svg)$/i;
-  const BG_MODES = [
-    { cls: "bg-checker", name: "checker" }, { cls: "bg-paper", name: "paper" },
-    { cls: "bg-light", name: "light" }, { cls: "bg-dark", name: "dark" },
-  ];
-  const MARK = { keep: '<span class="stampmark">kept</span>', toss: '<span class="stampmark">culled</span>' };
+  const STORE = "cull.v3";
   const $ = (id) => document.getElementById(id);
-  const screens = { landing: $("landing"), tool: $("tool"), summary: $("summary") };
+  const screens = { home: $("home"), deck: $("deck"), done: $("done") };
 
-  let images = [], idx = 0, verdicts = {}, bgIndex = 0, queue = null, dirHandle = null;
+  let shots = [];              /* { name, url, handle } */
+  let at = 0;
+  let sent = {};               /* filename -> "l" | "r" */
+  let srcDir = null;
+  let acts = { l: { kind: "delete", dir: null }, r: { kind: "keep", dir: null } };
+  let running = false;
 
-  /* ---- self-playing hero demo ---- */
-  const DEMO = ["keep","cull","keep","keep","cull","cull","keep","keep","cull","keep","keep","cull","keep","cull","keep","keep","cull","keep","keep","cull"];
-  let demoCells = [], demoTimer = null, demoI = 0;
-  function buildDemo() {
-    const sheet = $("demo-sheet");
-    DEMO.forEach(() => { const c = document.createElement("div"); c.className = "cell";
-      const m = document.createElement("span"); m.className = "m"; c.appendChild(m); sheet.appendChild(c); });
-    demoCells = Array.from(sheet.children);
-    demoStep();
+  const canWrite = () => typeof window.showDirectoryPicker === "function";
+  const srcName = () => (srcDir ? srcDir.name : "this folder");
+  const actLabel = (side) => {
+    const a = acts[side];
+    if (a.kind === "delete") return "Delete";
+    if (a.kind === "keep") return "Keep";
+    return a.dir ? a.dir.name : "Move to…";
+  };
+
+  let toastTimer = null;
+  function toast(msg) {
+    const t = $("toast"); t.textContent = msg; t.classList.add("show");
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 1800);
   }
-  function demoStep() {
-    if (demoI < DEMO.length) {
-      demoCells.forEach((c, j) => c.classList.toggle("scan", j === demoI));
-      const v = DEMO[demoI], m = demoCells[demoI].firstChild;
-      m.className = "m in " + (v === "keep" ? "ring" : "ex");
-      let k = 0, c = 0; for (let j = 0; j <= demoI; j++) (DEMO[j] === "keep" ? k++ : c++);
-      $("demo-k").textContent = k + " kept"; $("demo-c").textContent = c + " culled";
-      demoI++;
-      demoTimer = setTimeout(demoStep, demoI === 1 ? 700 : 440);
-    } else {
-      demoCells.forEach((c) => c.classList.remove("scan"));
-      demoTimer = setTimeout(() => {
-        demoCells.forEach((c) => { c.firstChild.className = "m"; });
-        $("demo-k").textContent = "0 kept"; $("demo-c").textContent = "0 culled"; demoI = 0; demoStep();
-      }, 2600);
-    }
-  }
-  function stopDemo() { if (demoTimer) { clearTimeout(demoTimer); demoTimer = null; } }
-
-  function loadVerdicts() { try { verdicts = JSON.parse(localStorage.getItem(LS_KEY)) || {}; } catch { verdicts = {}; } }
-  function saveVerdicts() { try { localStorage.setItem(LS_KEY, JSON.stringify(verdicts)); } catch {} }
   function show(name) { for (const k in screens) screens[k].classList.toggle("hidden", k !== name); }
 
-  function startTriage(entries) {
-    if (entries.length === 0) { $("landing-err").textContent = "No images in that folder. Pick one with image files."; return; }
-    entries.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-    images.forEach(i => URL.revokeObjectURL(i.url));
-    images = entries; loadVerdicts(); queue = null; idx = firstUnreviewedIndex(); stopDemo(); show("tool"); render();
+  /* ---------- remember decisions per folder ---------- */
+  function load() {
+    try { sent = (JSON.parse(localStorage.getItem(STORE)) || {})[srcName()] || {}; } catch { sent = {}; }
   }
-  $("pick-btn").addEventListener("click", async () => {
-    $("landing-err").textContent = "";
-    if (window.showDirectoryPicker) {
-      try { dirHandle = await window.showDirectoryPicker({ mode: "readwrite" }); } catch { return; }
-      const imgs = [];
+  function save() {
+    try {
+      const all = JSON.parse(localStorage.getItem(STORE)) || {};
+      all[srcName()] = sent;
+      localStorage.setItem(STORE, JSON.stringify(all));
+    } catch { /* private browsing or full quota: decisions just will not survive a reload */ }
+  }
+
+  /* ---------- opening a folder ---------- */
+  $("open").addEventListener("click", async () => {
+    $("err").textContent = "";
+    let found;
+    if (canWrite()) {
+      let handle;
+      try { handle = await window.showDirectoryPicker({ mode: "readwrite", id: "cull-src" }); } catch { return; }
+      srcDir = handle;
+      found = [];
       try {
-        for await (const entry of dirHandle.values()) {
+        for await (const entry of handle.values()) {
           if (entry.kind === "file" && IMG_RE.test(entry.name) && !entry.name.startsWith(".")) {
-            const file = await entry.getFile(); imgs.push({ name: entry.name, url: URL.createObjectURL(file) });
+            found.push({ name: entry.name, handle: entry, url: null });
           }
         }
-      } catch { $("landing-err").textContent = "Couldn't read that folder."; return; }
-      startTriage(imgs);
-    } else { $("folder").click(); }
-  });
-  let inp = document.createElement("input");
-  inp.type = "file"; inp.webkitdirectory = true; inp.multiple = true; inp.id = "folder"; inp.style.display = "none";
-  inp.addEventListener("change", (e) => {
-    dirHandle = null;
-    const imgs = Array.from(e.target.files || []).filter(f => IMG_RE.test(f.name) && !f.name.startsWith("."))
-      .map(f => ({ name: f.name, url: URL.createObjectURL(f) }));
-    startTriage(imgs);
-  });
-  document.body.appendChild(inp);
-
-  function firstUnreviewedIndex() { for (let i = 0; i < images.length; i++) if (!(images[i].name in verdicts)) return i; return images.length; }
-  function reviewedCount() { return images.reduce((n, i) => n + (i.name in verdicts ? 1 : 0), 0); }
-  function pad(n) { return String(n).padStart(String(images.length).length, "0"); }
-
-  function render() {
-    if (idx >= images.length) return renderSummary();
-    const cur = images[idx];
-    $("img").src = cur.url; $("img").alt = cur.name;
-    $("filename").textContent = cur.name;
-    $("counter").textContent = pad(idx + 1) + " / " + images.length;
-    $("progress-bar").style.width = (reviewedCount() / images.length * 100) + "%";
-    const v = verdicts[cur.name];
-    $("btn-keep").classList.toggle("marked", v === "keep");
-    $("btn-toss").classList.toggle("marked", v === "toss");
-  }
-  function stamp(v) { const el = $("stamp"); el.innerHTML = MARK[v]; el.className = "stamp " + v; void el.offsetWidth; el.classList.add("run"); }
-  function decide(verdict) { if (idx >= images.length) return; verdicts[images[idx].name] = verdict; saveVerdicts(); stamp(verdict); advance(); }
-  function advance() {
-    if (queue) {
-      const after = queue.indexOf(images[idx].name); let next = -1;
-      for (let q = after + 1; q < queue.length; q++) { const ni = images.findIndex(im => im.name === queue[q]); if (ni !== -1) { next = ni; break; } }
-      idx = next === -1 ? images.length : next;
-    } else { idx++; }
-    render();
-  }
-  function undo() {
-    if (queue) {
-      const at = queue.indexOf(idx < images.length ? images[idx].name : null); const startQ = at === -1 ? queue.length - 1 : at - 1;
-      for (let q = startQ; q >= 0; q--) { const pi = images.findIndex(im => im.name === queue[q]); if (pi !== -1) { idx = pi; render(); return; } }
-      return;
+        for (const s of found) s.url = URL.createObjectURL(await s.handle.getFile());
+      } catch { $("err").textContent = "Could not read that folder."; return; }
+    } else {
+      srcDir = null;
+      found = await pickViaInput();
+      acts = { l: { kind: "keep", dir: null }, r: { kind: "keep", dir: null } };
     }
-    idx = idx > 0 ? Math.min(idx, images.length) - 1 : 0;
-    if (!screens.summary.classList.contains("hidden")) show("tool");
-    render();
-  }
-  function cycleBg() {
-    bgIndex = (bgIndex + 1) % BG_MODES.length; const frame = $("frame");
-    BG_MODES.forEach(m => frame.classList.remove(m.cls)); frame.classList.add(BG_MODES[bgIndex].cls);
-    $("bg-name").textContent = BG_MODES[bgIndex].name;
-  }
-
-  function listFor(type) { return images.filter(i => verdicts[i.name] === type).map(i => i.name); }
-  function buildDeletePrompt(toss) {
-    if (toss.length === 0) return "Nothing culled — every frame made the cut.";
-    return [
-      `I triaged a folder of images and these didn't make the cut. Please delete them from my project:`, ``,
-      ...toss.map(f => `- ${f}`), ``,
-      `They live in the folder I just reviewed (adjust the path if it isn't the current directory). Delete only these exact files and leave everything else untouched.`,
-    ].join("\n");
-  }
-  function renderSummary() {
-    queue = null;
-    const keep = listFor("keep"), toss = listFor("toss");
-    $("t-keep").textContent = keep.length; $("t-toss").textContent = toss.length;
-    $("t-left").textContent = images.length - keep.length - toss.length;
-    $("summary-sub").textContent = images.length + " frames · " + reviewedCount() + " marked";
-    $("del-prompt").value = buildDeletePrompt(toss);
-    $("toss-list").value = toss.join("\n"); $("keep-list").value = keep.join("\n");
-    $("toss-count").textContent = "(" + toss.length + ")"; $("keep-count").textContent = "(" + keep.length + ")";
-    $("delete-now").textContent = "Delete these " + toss.length + " now";
-    $("delete-now").classList.toggle("hidden", !(dirHandle && toss.length));
-    show("summary");
-  }
-  async function deleteTossed() {
-    const toss = listFor("toss");
-    if (toss.length === 0) { toast("Nothing to delete"); return; }
-    if (!dirHandle) { toast("No write access — copy the prompt"); return; }
-    if (!confirm(`Permanently delete ${toss.length} file(s) from the folder?\nThis can't be undone.`)) return;
-    try { if (dirHandle.requestPermission) { const p = await dirHandle.requestPermission({ mode: "readwrite" }); if (p !== "granted") { toast("Write permission denied"); return; } } } catch {}
-    let ok = 0; const failed = [];
-    for (const name of toss) { try { await dirHandle.removeEntry(name); ok++; } catch { failed.push(name); } }
-    const gone = new Set(toss.filter(n => !failed.includes(n)));
-    images = images.filter(i => { if (gone.has(i.name)) { URL.revokeObjectURL(i.url); delete verdicts[i.name]; return false; } return true; });
-    saveVerdicts(); toast(`Deleted ${ok}${failed.length ? `, ${failed.length} failed` : ""}`); renderSummary();
-  }
-
-  function download(filename, text) {
-    const blob = new Blob([text + (text ? "\n" : "")], { type: "text/plain" }); const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-  let toastTimer = null;
-  function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 1400); }
-  async function copyText(text, label) {
-    try { await navigator.clipboard.writeText(text); toast(label + " copied"); }
-    catch { const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); toast(label + " copied"); } catch { toast("Press Cmd-C to copy"); } ta.remove(); }
-  }
-
-  $("btn-keep").addEventListener("click", () => decide("keep"));
-  $("btn-toss").addEventListener("click", () => decide("toss"));
-  $("btn-undo").addEventListener("click", undo);
-  $("btn-bg").addEventListener("click", cycleBg);
-  $("btn-finish").addEventListener("click", renderSummary);
-  $("dl-toss").addEventListener("click", () => download("culled.txt", listFor("toss").join("\n")));
-  $("dl-keep").addEventListener("click", () => download("kept.txt", listFor("keep").join("\n")));
-  $("copy-toss").addEventListener("click", () => copyText(listFor("toss").join("\n"), "Culled list"));
-  $("copy-keep").addEventListener("click", () => copyText(listFor("keep").join("\n"), "Kept list"));
-  $("copy-prompt").addEventListener("click", () => copyText(buildDeletePrompt(listFor("toss")), "Prompt"));
-  $("delete-now").addEventListener("click", deleteTossed);
-  $("re-review").addEventListener("click", () => { queue = null; idx = 0; show("tool"); render(); });
-  $("review-toss-only").addEventListener("click", () => {
-    const names = listFor("toss"); if (names.length === 0) { toast("Nothing culled"); return; }
-    queue = names; idx = images.findIndex(im => im.name === names[0]); show("tool"); render();
+    if (!found.length) { $("err").textContent = "No photos in that folder."; return; }
+    found.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    shots.forEach((s) => URL.revokeObjectURL(s.url));
+    shots = found;
+    load();
+    at = shots.findIndex((s) => !(s.name in sent));
+    if (at === -1) at = shots.length;
+    show("deck");
+    paint();
   });
-  $("start-over").addEventListener("click", () => {
-    if (!confirm("Clear all marks for these images?")) return;
-    verdicts = {}; saveVerdicts(); queue = null; idx = 0; show("tool"); render();
+
+  function pickViaInput() {
+    return new Promise((resolve) => {
+      const input = document.createElement("input");
+      input.type = "file"; input.multiple = true; input.webkitdirectory = true;
+      input.addEventListener("change", () => {
+        resolve(Array.from(input.files || [])
+          .filter((f) => IMG_RE.test(f.name) && !f.name.startsWith("."))
+          .map((f) => ({ name: f.name, handle: null, url: URL.createObjectURL(f) })));
+      }, { once: true });
+      input.click();
+    });
+  }
+
+  /* ---------- the deck ---------- */
+  const doneCount = () => shots.reduce((n, s) => n + (s.name in sent ? 1 : 0), 0);
+
+  function paint() {
+    if (at >= shots.length) { openDone(); return; }
+    const cur = shots[at];
+    $("shot").src = cur.url;
+    $("shot").alt = cur.name;
+    $("f").textContent = cur.name;
+    $("n").innerHTML = (at + 1) + "<span> / " + shots.length + "</span>";
+    $("bar").style.width = (doneCount() / shots.length) * 100 + "%";
+    $("what-l").textContent = actLabel("l");
+    $("what-r").textContent = actLabel("r");
+    $("go-l").classList.toggle("on", sent[cur.name] === "l");
+    $("go-r").classList.toggle("on", sent[cur.name] === "r");
+    paintStrip();
+  }
+
+  function paintStrip() {
+    const strip = $("strip");
+    strip.textContent = "";
+    const reach = window.innerWidth < 620 ? 3 : 5;
+    for (let i = Math.max(0, at - reach); i <= Math.min(shots.length - 1, at + reach); i++) {
+      const s = shots[i];
+      const b = document.createElement("button");
+      b.className = "thumb" + (i === at ? " now" : "");
+      b.title = s.name;
+      const img = document.createElement("img");
+      img.src = s.url; img.alt = "";
+      b.appendChild(img);
+      if (sent[s.name]) { const flag = document.createElement("i"); flag.className = sent[s.name]; b.appendChild(flag); }
+      b.addEventListener("click", () => { at = i; paint(); });
+      strip.appendChild(b);
+    }
+  }
+
+  function send(side) {
+    if (at >= shots.length) return;
+    sent[shots[at].name] = side;
+    save();
+    const plate = $("plate");
+    plate.classList.add(side === "l" ? "gone-l" : "gone-r");
+    setTimeout(() => { plate.classList.remove("gone-l", "gone-r"); at++; paint(); }, 130);
+  }
+  function undo() { at = Math.max(0, Math.min(at, shots.length) - 1); show("deck"); paint(); }
+
+  $("go-l").addEventListener("click", () => send("l"));
+  $("go-r").addEventListener("click", () => send("r"));
+  $("undo").addEventListener("click", undo);
+  $("finish").addEventListener("click", openDone);
+
+  /* drag the photo either way */
+  const stage = $("stage");
+  let from = null, dx = 0;
+  const PULL = 90;
+  stage.addEventListener("pointerdown", (e) => {
+    if (at >= shots.length || e.button !== 0) return;
+    from = e.clientX; dx = 0;
+    $("plate").classList.add("drag");
+    stage.setPointerCapture(e.pointerId);
   });
+  stage.addEventListener("pointermove", (e) => {
+    if (from === null) return;
+    dx = e.clientX - from;
+    $("plate").style.transform = "translateX(" + dx + "px) rotate(" + dx / 46 + "deg)";
+    $("wash-l").classList.toggle("on", dx < -PULL);
+    $("wash-r").classList.toggle("on", dx > PULL);
+  });
+  function release() {
+    if (from === null) return;
+    const moved = dx;
+    from = null;
+    $("plate").classList.remove("drag");
+    $("plate").style.transform = "";
+    $("wash-l").classList.remove("on"); $("wash-r").classList.remove("on");
+    if (moved < -PULL) send("l");
+    else if (moved > PULL) send("r");
+  }
+  stage.addEventListener("pointerup", release);
+  stage.addEventListener("pointercancel", release);
+
   document.addEventListener("keydown", (e) => {
-    if (screens.tool.classList.contains("hidden")) return;
-    const t = e.target.tagName; if (t === "TEXTAREA" || t === "INPUT") return;
-    switch (e.key) {
-      case "ArrowRight": case "d": case "k": e.preventDefault(); decide("keep"); break;
-      case "ArrowLeft":  case "a": case "x": e.preventDefault(); decide("toss"); break;
-      case "z": case "Z": case "Backspace": e.preventDefault(); undo(); break;
-      case "b": case "B": e.preventDefault(); cycleBg(); break;
-    }
+    if (!$("sheet").classList.contains("hidden")) { if (e.key === "Escape") closeSheet(); return; }
+    if (screens.deck.classList.contains("hidden")) return;
+    if (e.key === "ArrowLeft") { e.preventDefault(); send("l"); }
+    else if (e.key === "ArrowRight") { e.preventDefault(); send("r"); }
+    else if (e.key === "z" || e.key === "Z" || e.key === "Backspace") { e.preventDefault(); undo(); }
   });
 
-  buildDemo();
+  /* ---------- what the arrows do ---------- */
+  function paintSheet() {
+    document.querySelectorAll(".opt").forEach((o) => {
+      o.classList.toggle("on", acts[o.dataset.side].kind === o.dataset.act);
+    });
+    $("move-l").textContent = acts.l.dir ? acts.l.dir.name : "Move to…";
+    $("move-r").textContent = acts.r.dir ? acts.r.dir.name : "Move to…";
+    $("sheet-note").textContent = canWrite() ? "" : "this browser cannot change files";
+    document.querySelectorAll('.opt[data-act="delete"], .opt[data-act="move"]').forEach((o) => { o.disabled = !canWrite(); });
+  }
+  function openSheet() { $("sheet-err").textContent = ""; paintSheet(); $("sheet").classList.remove("hidden"); }
+  function closeSheet() { $("sheet").classList.add("hidden"); paint(); }
+  $("settings").addEventListener("click", openSheet);
+  $("sheet-close").addEventListener("click", closeSheet);
+  $("sheet").addEventListener("click", (e) => { if (e.target === $("sheet")) closeSheet(); });
+
+  document.querySelectorAll(".opt").forEach((opt) => {
+    opt.addEventListener("click", async () => {
+      const side = opt.dataset.side, act = opt.dataset.act;
+      $("sheet-err").textContent = "";
+      if (act !== "move") { acts[side] = { kind: act, dir: null }; paintSheet(); return; }
+      let dir;
+      try { dir = await window.showDirectoryPicker({ mode: "readwrite", id: "cull-dest-" + side }); } catch { return; }
+      if (srcDir && (await srcDir.isSameEntry(dir))) {
+        $("sheet-err").textContent = "That is the folder you are sorting. Pick a different one.";
+        return;
+      }
+      acts[side] = { kind: "move", dir };
+      paintSheet();
+    });
+  });
+
+  /* ---------- the end ---------- */
+  const pile = (side) => shots.filter((s) => sent[s.name] === side).map((s) => s.name);
+
+  function plan() {
+    const jobs = [];
+    for (const s of shots) {
+      const side = sent[s.name];
+      if (!side) continue;
+      const a = acts[side];
+      if (a.kind === "keep") continue;
+      if (a.kind === "move" && !a.dir) continue;
+      jobs.push({ shot: s, kind: a.kind, dir: a.dir });
+    }
+    return jobs;
+  }
+
+  function openDone() {
+    const jobs = plan();
+    const dels = jobs.filter((j) => j.kind === "delete").length;
+    const moves = jobs.filter((j) => j.kind === "move").length;
+    const untouched = shots.length - dels - moves;
+    $("done-h").textContent = doneCount() < shots.length ? "Stopped early." : "All decided.";
+    const bits = [];
+    if (dels) bits.push("<b>" + dels + "</b> to delete");
+    if (moves) bits.push("<b>" + moves + "</b> to move");
+    bits.push("<b>" + untouched + "</b> staying put");
+    $("tally").innerHTML = bits.join("<br />");
+    const label = [];
+    if (dels) label.push("Delete " + dels);
+    if (moves) label.push("Move " + moves);
+    $("run").textContent = label.length ? label.join(" and ") : "Nothing to do";
+    $("run").disabled = !label.length || !canWrite() || !srcDir;
+    $("run-status").textContent = "";
+    show("done");
+  }
+
+  async function allow(handle) {
+    if (!handle.requestPermission) return true;
+    try { return (await handle.requestPermission({ mode: "readwrite" })) === "granted"; } catch { return false; }
+  }
+  async function nameFree(dir, name) {
+    try { await dir.getFileHandle(name); return false; } catch { return true; }
+  }
+  async function freeName(dir, name) {
+    if (await nameFree(dir, name)) return name;
+    const dot = name.lastIndexOf(".");
+    const stem = dot > 0 ? name.slice(0, dot) : name;
+    const ext = dot > 0 ? name.slice(dot) : "";
+    for (let n = 1; n < 500; n++) {
+      const tryName = stem + "-" + n + ext;
+      if (await nameFree(dir, tryName)) return tryName;
+    }
+    return stem + "-" + Date.now() + ext;
+  }
+
+  async function run() {
+    if (running) return;
+    const jobs = plan().filter((j) => j.shot.handle);
+    if (!jobs.length) return;
+    const dels = jobs.filter((j) => j.kind === "delete").length;
+    const moves = jobs.filter((j) => j.kind === "move").length;
+    const summary = [dels ? "delete " + dels + " files" : "", moves ? "move " + moves + " files" : ""].filter(Boolean).join(" and ");
+    if (!confirm("About to " + summary + " in " + srcName() + ".\nDeletes cannot be undone.")) return;
+    if (!(await allow(srcDir))) { toast("permission denied"); return; }
+    for (const side of ["l", "r"]) {
+      if (acts[side].kind === "move" && acts[side].dir && !(await allow(acts[side].dir))) { toast("permission denied"); return; }
+    }
+
+    running = true;
+    $("run").disabled = true;
+    const finished = [], failed = [];
+    for (let i = 0; i < jobs.length; i++) {
+      const job = jobs[i];
+      $("run-status").textContent = (i + 1) + " of " + jobs.length + " · " + job.shot.name;
+      try {
+        if (job.kind === "move") {
+          const file = await job.shot.handle.getFile();
+          const target = await freeName(job.dir, job.shot.name);
+          const fh = await job.dir.getFileHandle(target, { create: true });
+          const stream = await fh.createWritable();
+          await stream.write(file);
+          await stream.close();
+          const landed = await (await job.dir.getFileHandle(target)).getFile();
+          /* only let go of the original once the copy is provably the same size */
+          if (landed.size !== file.size) { failed.push(job.shot.name); continue; }
+        }
+        await srcDir.removeEntry(job.shot.name);
+        finished.push(job.shot.name);
+      } catch { failed.push(job.shot.name); }
+    }
+
+    const gone = new Set(finished);
+    shots = shots.filter((s) => {
+      if (!gone.has(s.name)) return true;
+      URL.revokeObjectURL(s.url); delete sent[s.name]; return false;
+    });
+    save();
+    running = false;
+    at = 0;
+    $("run-status").textContent = "Done. " + finished.length + " handled" +
+      (failed.length ? ", " + failed.length + " left alone: " + failed.join(", ") : "") + ".";
+    toast(finished.length + " handled");
+    openDone();
+  }
+  $("run").addEventListener("click", run);
+
+  function listText() {
+    const out = [];
+    for (const side of ["l", "r"]) {
+      const names = pile(side);
+      if (!names.length) continue;
+      const a = acts[side];
+      const verb = a.kind === "delete" ? "Delete from " + srcName()
+        : a.kind === "move" ? "Move to " + (a.dir ? a.dir.name : "another folder")
+        : "Leave alone in " + srcName();
+      out.push(verb + ":", ...names.map((n) => "- " + n), "");
+    }
+    if (!out.length) return "Nothing decided yet.";
+    out.push("Only touch these exact files. Adjust the folder paths if they are not where you expect.");
+    return out.join("\n");
+  }
+  $("copy").addEventListener("click", async () => {
+    const text = listText();
+    try { await navigator.clipboard.writeText(text); toast("list copied"); }
+    catch {
+      const ta = document.createElement("textarea");
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); toast("list copied"); } catch { toast("press cmd-c"); }
+      ta.remove();
+    }
+  });
+  $("back").addEventListener("click", () => { at = Math.min(at, Math.max(0, shots.length - 1)); show("deck"); paint(); });
+  $("restart").addEventListener("click", () => {
+    if (!confirm("Forget every decision for " + srcName() + "?")) return;
+    sent = {}; save(); at = 0; show("deck"); paint();
+  });
+
+  window.addEventListener("resize", () => { if (!screens.deck.classList.contains("hidden")) paintStrip(); });
 })();
 </script>
 </body>
