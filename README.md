@@ -1,25 +1,46 @@
 # Cull
 
-A quiet, single-page image triage tool. Step through a folder of images, keep what works and cull the rest, then walk away with a delete list, or remove the rejects on the spot. **100% client-side**: nothing is uploaded, everything stays in your browser.
+Open a folder of photos and send each one left or right. You decide what the two arrows do.
 
-## What it does
+Each arrow is set independently to one of three things:
 
-1. **Choose a folder** of images.
-2. **Mark** each frame: keep (○) or cull (✕) — by mouse, or with `←` / `→` arrow keys (`Z` undo, `B` cycles the backdrop).
-3. At the end, handle the culled ones two ways:
-   - **Copy a delete prompt** — a ready-to-paste prompt telling Claude Code exactly which files to delete. Works in every browser.
-   - **Delete them directly** — in Chrome/Edge the tool uses the File System Access API to remove the culled files from the folder itself (one click, with a confirm). Needs a secure context (HTTPS).
+- **Delete** — removed from the folder
+- **Keep** — left exactly where it is
+- **Move to…** — moved into a folder you choose
 
-Decisions are saved in the browser by filename, so you can close the tab and resume.
+So "keep or bin" is left = Delete, right = Keep. Pulling the good shots off a phone import is left = Keep, right = Move to. Splitting a shoot in two is Move to on both sides. Same motion every time, no modes to pick between.
 
-## Privacy
+Nothing is uploaded. No server, no analytics.
 
-No server, no upload, no analytics. Images are read locally via the folder picker and rendered from in-memory object URLs. The direct-delete feature only touches files in the folder you explicitly granted access to.
+## Using it
 
-## Tech
+1. **Open folder.**
+2. **Change what the arrows do** if the defaults (delete / keep) are not what you want.
+3. Send each photo: `←` / `→`, the two buttons, or drag the photo sideways. `Z` undoes. Click any thumbnail in the strip to jump back to it.
+4. Press the button at the end. It says exactly what it will do, for example `Delete 12 and Move 30`.
 
-A single self-contained `index.html`: vanilla JS, no build step, no dependencies (Google Fonts is the only external request). Deploy by serving the file statically.
+Nothing on disk changes until that final button. Decisions are remembered per folder in `localStorage`, so closing the tab mid-pass is safe.
+
+## How a move works
+
+Read the file, write it to the destination, re-read what landed and compare byte length, and only then remove the original. If the sizes do not match, the original stays and the file is reported as left alone. Name clashes at the destination get a `-1`, `-2` suffix instead of overwriting. Choosing the source folder as a destination is refused.
+
+## Browser support
+
+Changing files needs the File System Access API: **Chrome or Edge, over https or localhost**. Elsewhere (Safari, Firefox, or a raw `file://` open) the folder still opens through `<input webkitdirectory>` and you can sort every photo, but Delete and Move are disabled and you leave with a copyable list instead.
+
+## Phones
+
+The folder picker only sees real filesystem paths. An iPhone never mounts as a drive on macOS, Android goes through Android File Transfer rather than a mounted volume, and mobile Chrome has no File System Access API. So: import the photos onto the computer first (Image Capture, AirDrop, SD card), then sort from there. Google Drive works if Drive for Desktop is installed, since it is an ordinary folder at that point.
 
 ## Run locally
 
-Open `index.html` in any browser. The **direct-delete** path needs a secure context (HTTPS or `localhost`), so on a raw `file://` open you get the copy-prompt path only.
+```
+python3 -m http.server 8811 --directory .
+```
+
+Open `http://localhost:8811`. Localhost is a secure context, so deleting and moving are enabled.
+
+## Tech
+
+One self-contained `index.html`: vanilla JS, no build step, no dependencies. Google Fonts (IBM Plex Sans + Mono) is the only external request.
