@@ -36,7 +36,6 @@
   :focus-visible { outline: 2px solid var(--right); outline-offset: 3px; }
   .hidden { display: none !important; }
   .tag { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
-  kbd { font-family: var(--mono); font-size: 10.5px; color: var(--dim); border: 1px solid var(--line); border-radius: 3px; padding: 1px 5px; }
   ::selection { background: var(--text); color: var(--page); }
 
   .btn {
@@ -116,6 +115,7 @@
   .opt { flex: 1; border: 1px solid var(--line); border-radius: 7px; padding: 11px 6px; font-family: var(--mono); font-size: 12.5px;
     text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: border-color var(--snap), background var(--snap), color var(--snap); }
   .opt:hover { border-color: var(--faint); }
+  .opt:disabled { opacity: 0.35; cursor: not-allowed; }
   .set.l .opt.on { border-color: var(--left); background: var(--left-soft); color: var(--text); }
   .set.r .opt.on { border-color: var(--right); background: var(--right-soft); color: var(--text); }
   .card .foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 24px; }
@@ -123,12 +123,13 @@
 
   /* ---------- done ---------- */
   #done { flex: 1; display: grid; place-items: center; padding: 24px; text-align: center; }
-  .done-inner { width: 100%; max-width: 480px; }
+  .done-inner { width: 100%; max-width: 520px; }
   #done h1 { font-weight: 450; font-size: 30px; letter-spacing: -0.02em; margin: 0 0 10px; }
   #tally { color: var(--dim); font-family: var(--mono); font-size: 13px; margin: 0 0 30px; line-height: 2; }
   #tally b { color: var(--text); font-weight: 500; }
   .done-row { display: flex; flex-direction: column; align-items: center; gap: 10px; }
-  #run-status { font-family: var(--mono); font-size: 12.5px; color: var(--dim); min-height: 20px; margin-top: 14px; }
+  #run-status { font-family: var(--mono); font-size: 12.5px; color: var(--dim); min-height: 20px; margin-top: 16px; line-height: 1.7; }
+  #run-status.bad { color: var(--left); }
   #done .others { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--line); display: flex; justify-content: center; gap: 4px; flex-wrap: wrap; }
 
   .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(6px);
@@ -151,7 +152,7 @@
     <h1>Open a folder of photos.</h1>
     <button class="btn big" id="open">Open folder</button>
     <span id="err"></span>
-    <p class="sub">Send each photo left or right. You pick what the arrows do.<br />Nothing leaves your computer.</p>
+    <p class="sub">Send each photo left or right. You pick what the arrows do.<br />Your photos never leave your computer.</p>
   </div>
 </section>
 
@@ -232,13 +233,16 @@
   "use strict";
 
   const IMG_RE = /\.(png|jpe?g|gif|webp|avif|bmp|svg)$/i;
-  const STORE = "cull.v3";
   const $ = (id) => document.getElementById(id);
   const screens = { home: $("home"), deck: $("deck"), done: $("done") };
 
-  let shots = [];              /* { name, url, handle } */
+  /* Decisions live in memory only, for the lifetime of the page.
+     They are deliberately not persisted: a stored decision is a side ("l"/"r"),
+     and what a side MEANS is a directory handle that cannot be stored alongside it.
+     Reloading and finding "left" now means Delete instead of Move is a way to lose photos. */
+  let shots = [];            /* { name, url, handle } */
   let at = 0;
-  let sent = {};               /* filename -> "l" | "r" */
+  let sent = {};             /* filename -> "l" | "r" */
   let srcDir = null;
   let acts = { l: { kind: "delete", dir: null }, r: { kind: "keep", dir: null } };
   let running = false;
@@ -258,51 +262,24 @@
     clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 1800);
   }
   function show(name) { for (const k in screens) screens[k].classList.toggle("hidden", k !== name); }
-
-  /* ---------- remember decisions per folder ---------- */
-  function load() {
-    try { sent = (JSON.parse(localStorage.getItem(STORE)) || {})[srcName()] || {}; } catch { sent = {}; }
-  }
-  function save() {
-    try {
-      const all = JSON.parse(localStorage.getItem(STORE)) || {};
-      all[srcName()] = sent;
-      localStorage.setItem(STORE, JSON.stringify(all));
-    } catch { /* private browsing or full quota: decisions just will not survive a reload */ }
-  }
+  function release(list) { list.forEach((s) => URL.revokeObjectURL(s.url)); }
 
   /* ---------- opening a folder ---------- */
-  $("open").addEventListener("click", async () => {
-    $("err").textContent = "";
-    let found;
-    if (canWrite()) {
-      let handle;
-      try { handle = await window.showDirectoryPicker({ mode: "readwrite", id: "cull-src" }); } catch { return; }
-      srcDir = handle;
-      found = [];
-      try {
-        for await (const entry of handle.values()) {
-          if (entry.kind === "file" && IMG_RE.test(entry.name) && !entry.name.startsWith(".")) {
-            found.push({ name: entry.name, handle: entry, url: null });
-          }
-        }
-        for (const s of found) s.url = URL.createObjectURL(await s.handle.getFile());
-      } catch { $("err").textContent = "Could not read that folder."; return; }
-    } else {
-      srcDir = null;
-      found = await pickViaInput();
-      acts = { l: { kind: "keep", dir: null }, r: { kind: "keep", dir: null } };
+  async function enumerate(handle) {
+    const found = [];
+    for await (const entry of handle.values()) {
+      if (entry.kind === "file" && IMG_RE.test(entry.name) && !entry.name.startsWith(".")) {
+        found.push({ name: entry.name, handle: entry, url: null });
+      }
     }
-    if (!found.length) { $("err").textContent = "No photos in that folder."; return; }
-    found.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-    shots.forEach((s) => URL.revokeObjectURL(s.url));
-    shots = found;
-    load();
-    at = shots.findIndex((s) => !(s.name in sent));
-    if (at === -1) at = shots.length;
-    show("deck");
-    paint();
-  });
+    try {
+      for (const s of found) s.url = URL.createObjectURL(await s.handle.getFile());
+    } catch (err) {
+      release(found.filter((s) => s.url));
+      throw err;
+    }
+    return found;
+  }
 
   function pickViaInput() {
     return new Promise((resolve) => {
@@ -317,6 +294,38 @@
     });
   }
 
+  async function openFolder() {
+    if (!canWrite()) {
+      /* Read-only browsers cannot delete or move, so both arrows can only mean Keep. */
+      acts = { l: { kind: "keep", dir: null }, r: { kind: "keep", dir: null } };
+      return { dir: null, found: await pickViaInput() };
+    }
+    const handle = await window.showDirectoryPicker({ mode: "readwrite", id: "cull-src" });
+    return { dir: handle, found: await enumerate(handle) };
+  }
+
+  $("open").addEventListener("click", async () => {
+    $("err").textContent = "";
+    let opened;
+    try { opened = await openFolder(); }
+    catch (err) {
+      if (err && err.name === "AbortError") return;
+      $("err").textContent = "Could not read that folder.";
+      return;
+    }
+    if (!opened.found.length) { $("err").textContent = "No photos in that folder."; return; }
+    opened.found.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    release(shots);
+    /* srcDir is only adopted once the folder actually read, so a failed open cannot
+       leave the app pointing at a folder whose photos never loaded. */
+    srcDir = opened.dir;
+    shots = opened.found;
+    sent = {};
+    at = 0;
+    show("deck");
+    paint();
+  });
+
   /* ---------- the deck ---------- */
   const doneCount = () => shots.reduce((n, s) => n + (s.name in sent ? 1 : 0), 0);
 
@@ -326,7 +335,7 @@
     $("shot").src = cur.url;
     $("shot").alt = cur.name;
     $("f").textContent = cur.name;
-    $("n").innerHTML = (at + 1) + "<span> / " + shots.length + "</span>";
+    $("n").textContent = (at + 1) + " / " + shots.length;
     $("bar").style.width = (doneCount() / shots.length) * 100 + "%";
     $("what-l").textContent = actLabel("l");
     $("what-r").textContent = actLabel("r");
@@ -340,28 +349,44 @@
     strip.textContent = "";
     const reach = window.innerWidth < 620 ? 3 : 5;
     for (let i = Math.max(0, at - reach); i <= Math.min(shots.length - 1, at + reach); i++) {
-      const s = shots[i];
-      const b = document.createElement("button");
-      b.className = "thumb" + (i === at ? " now" : "");
-      b.title = s.name;
-      const img = document.createElement("img");
-      img.src = s.url; img.alt = "";
-      b.appendChild(img);
-      if (sent[s.name]) { const flag = document.createElement("i"); flag.className = sent[s.name]; b.appendChild(flag); }
-      b.addEventListener("click", () => { at = i; paint(); });
-      strip.appendChild(b);
+      strip.appendChild(thumbFor(i));
     }
   }
+  function thumbFor(i) {
+    const s = shots[i];
+    const b = document.createElement("button");
+    b.className = "thumb" + (i === at ? " now" : "");
+    b.title = s.name;
+    const img = document.createElement("img");
+    img.src = s.url; img.alt = "";
+    b.appendChild(img);
+    if (sent[s.name]) {
+      const flag = document.createElement("i");
+      flag.className = sent[s.name];
+      b.appendChild(flag);
+    }
+    b.addEventListener("click", () => { at = i; paint(); });
+    return b;
+  }
 
+  /* The index advances synchronously so that a second keypress inside the animation
+     window lands on the next photo instead of overwriting the current one's decision. */
   function send(side) {
     if (at >= shots.length) return;
     sent[shots[at].name] = side;
-    save();
+    at++;
     const plate = $("plate");
     plate.classList.add(side === "l" ? "gone-l" : "gone-r");
-    setTimeout(() => { plate.classList.remove("gone-l", "gone-r"); at++; paint(); }, 130);
+    setTimeout(() => { plate.classList.remove("gone-l", "gone-r"); paint(); }, 130);
   }
-  function undo() { at = Math.max(0, Math.min(at, shots.length) - 1); show("deck"); paint(); }
+
+  /* Undo steps back AND withdraws the decision, otherwise the photo stays sentenced. */
+  function undo() {
+    at = Math.max(0, Math.min(at, shots.length) - 1);
+    if (shots[at]) delete sent[shots[at].name];
+    show("deck");
+    paint();
+  }
 
   $("go-l").addEventListener("click", () => send("l"));
   $("go-r").addEventListener("click", () => send("r"));
@@ -370,33 +395,34 @@
 
   /* drag the photo either way */
   const stage = $("stage");
-  let from = null, dx = 0;
+  let dragId = null, dragFrom = 0, dragX = 0;
   const PULL = 90;
   stage.addEventListener("pointerdown", (e) => {
-    if (at >= shots.length || e.button !== 0) return;
-    from = e.clientX; dx = 0;
+    /* one pointer at a time: a second finger must not move the origin mid-drag */
+    if (at >= shots.length || e.button !== 0 || !e.isPrimary || dragId !== null) return;
+    dragId = e.pointerId; dragFrom = e.clientX; dragX = 0;
     $("plate").classList.add("drag");
     stage.setPointerCapture(e.pointerId);
   });
   stage.addEventListener("pointermove", (e) => {
-    if (from === null) return;
-    dx = e.clientX - from;
-    $("plate").style.transform = "translateX(" + dx + "px) rotate(" + dx / 46 + "deg)";
-    $("wash-l").classList.toggle("on", dx < -PULL);
-    $("wash-r").classList.toggle("on", dx > PULL);
+    if (e.pointerId !== dragId) return;
+    dragX = e.clientX - dragFrom;
+    $("plate").style.transform = "translateX(" + dragX + "px) rotate(" + dragX / 46 + "deg)";
+    $("wash-l").classList.toggle("on", dragX < -PULL);
+    $("wash-r").classList.toggle("on", dragX > PULL);
   });
-  function release() {
-    if (from === null) return;
-    const moved = dx;
-    from = null;
+  function endDrag(e) {
+    if (e.pointerId !== dragId) return;
+    const moved = dragX;
+    dragId = null;
     $("plate").classList.remove("drag");
     $("plate").style.transform = "";
     $("wash-l").classList.remove("on"); $("wash-r").classList.remove("on");
     if (moved < -PULL) send("l");
     else if (moved > PULL) send("r");
   }
-  stage.addEventListener("pointerup", release);
-  stage.addEventListener("pointercancel", release);
+  stage.addEventListener("pointerup", endDrag);
+  stage.addEventListener("pointercancel", endDrag);
 
   document.addEventListener("keydown", (e) => {
     if (!$("sheet").classList.contains("hidden")) { if (e.key === "Escape") closeSheet(); return; }
@@ -410,11 +436,11 @@
   function paintSheet() {
     document.querySelectorAll(".opt").forEach((o) => {
       o.classList.toggle("on", acts[o.dataset.side].kind === o.dataset.act);
+      o.disabled = !canWrite() && o.dataset.act !== "keep";
     });
     $("move-l").textContent = acts.l.dir ? acts.l.dir.name : "Move to…";
     $("move-r").textContent = acts.r.dir ? acts.r.dir.name : "Move to…";
     $("sheet-note").textContent = canWrite() ? "" : "this browser cannot change files";
-    document.querySelectorAll('.opt[data-act="delete"], .opt[data-act="move"]').forEach((o) => { o.disabled = !canWrite(); });
   }
   function openSheet() { $("sheet-err").textContent = ""; paintSheet(); $("sheet").classList.remove("hidden"); }
   function closeSheet() { $("sheet").classList.add("hidden"); paint(); }
@@ -422,18 +448,23 @@
   $("sheet-close").addEventListener("click", closeSheet);
   $("sheet").addEventListener("click", (e) => { if (e.target === $("sheet")) closeSheet(); });
 
+  async function chooseDest(side) {
+    let dir;
+    try { dir = await window.showDirectoryPicker({ mode: "readwrite", id: "cull-dest-" + side }); }
+    catch { return; }
+    if (srcDir && (await srcDir.isSameEntry(dir))) {
+      $("sheet-err").textContent = "That is the folder you are sorting. Pick a different one.";
+      return;
+    }
+    acts[side] = { kind: "move", dir };
+    paintSheet();
+  }
   document.querySelectorAll(".opt").forEach((opt) => {
-    opt.addEventListener("click", async () => {
+    opt.addEventListener("click", () => {
       const side = opt.dataset.side, act = opt.dataset.act;
       $("sheet-err").textContent = "";
-      if (act !== "move") { acts[side] = { kind: act, dir: null }; paintSheet(); return; }
-      let dir;
-      try { dir = await window.showDirectoryPicker({ mode: "readwrite", id: "cull-dest-" + side }); } catch { return; }
-      if (srcDir && (await srcDir.isSameEntry(dir))) {
-        $("sheet-err").textContent = "That is the folder you are sorting. Pick a different one.";
-        return;
-      }
-      acts[side] = { kind: "move", dir };
+      if (act === "move") { chooseDest(side); return; }
+      acts[side] = { kind: act, dir: null };
       paintSheet();
     });
   });
@@ -444,10 +475,8 @@
   function plan() {
     const jobs = [];
     for (const s of shots) {
-      const side = sent[s.name];
-      if (!side) continue;
-      const a = acts[side];
-      if (a.kind === "keep") continue;
+      const a = acts[sent[s.name]];
+      if (!a || a.kind === "keep") continue;
       if (a.kind === "move" && !a.dir) continue;
       jobs.push({ shot: s, kind: a.kind, dir: a.dir });
     }
@@ -457,29 +486,36 @@
   function openDone() {
     const jobs = plan();
     const dels = jobs.filter((j) => j.kind === "delete").length;
-    const moves = jobs.filter((j) => j.kind === "move").length;
-    const untouched = shots.length - dels - moves;
+    const moves = jobs.length - dels;
     $("done-h").textContent = doneCount() < shots.length ? "Stopped early." : "All decided.";
     const bits = [];
     if (dels) bits.push("<b>" + dels + "</b> to delete");
     if (moves) bits.push("<b>" + moves + "</b> to move");
-    bits.push("<b>" + untouched + "</b> staying put");
+    bits.push("<b>" + (shots.length - jobs.length) + "</b> staying put");
     $("tally").innerHTML = bits.join("<br />");
-    const label = [];
-    if (dels) label.push("Delete " + dels);
-    if (moves) label.push("Move " + moves);
-    $("run").textContent = label.length ? label.join(" and ") : "Nothing to do";
-    $("run").disabled = !label.length || !canWrite() || !srcDir;
-    $("run-status").textContent = "";
+    $("run").textContent = runLabel(dels, moves);
+    $("run").disabled = !jobs.length || !canWrite() || !srcDir;
+    $("back").classList.toggle("hidden", shots.length === 0);
     show("done");
+  }
+  function runLabel(dels, moves) {
+    const parts = [];
+    if (dels) parts.push("Delete " + dels);
+    if (moves) parts.push("Move " + moves);
+    return parts.length ? parts.join(" and ") : "Nothing to do";
   }
 
   async function allow(handle) {
     if (!handle.requestPermission) return true;
-    try { return (await handle.requestPermission({ mode: "readwrite" })) === "granted"; } catch { return false; }
+    try { return (await handle.requestPermission({ mode: "readwrite" })) === "granted"; }
+    catch { return false; }
   }
+  /* Only a genuine "not found" means the name is available. Any other error
+     (permission, transient IO) must NOT be read as free, or the create call
+     below would open and truncate an unrelated file at the destination. */
   async function nameFree(dir, name) {
-    try { await dir.getFileHandle(name); return false; } catch { return true; }
+    try { await dir.getFileHandle(name); return false; }
+    catch (err) { return !!err && err.name === "NotFoundError"; }
   }
   async function freeName(dir, name) {
     if (await nameFree(dir, name)) return name;
@@ -487,60 +523,89 @@
     const stem = dot > 0 ? name.slice(0, dot) : name;
     const ext = dot > 0 ? name.slice(dot) : "";
     for (let n = 1; n < 500; n++) {
-      const tryName = stem + "-" + n + ext;
-      if (await nameFree(dir, tryName)) return tryName;
+      const candidate = stem + "-" + n + ext;
+      if (await nameFree(dir, candidate)) return candidate;
     }
-    return stem + "-" + Date.now() + ext;
+    throw new Error("no free name");
+  }
+  async function discard(dir, name) {
+    try { await dir.removeEntry(name); } catch { /* the half-written copy stays; reported as failed */ }
+  }
+
+  /* One file. Returns:
+     "done"   the file is at its destination and gone from the source
+     "kept"   the copy landed but the original could not be removed, so it exists twice
+     "failed" nothing was changed at the destination */
+  async function applyJob(job) {
+    if (job.kind === "move") {
+      const file = await job.shot.handle.getFile();
+      const target = await freeName(job.dir, job.shot.name);
+      const fh = await job.dir.getFileHandle(target, { create: true });
+      const stream = await fh.createWritable();
+      await stream.write(file);
+      await stream.close();
+      const landed = await (await job.dir.getFileHandle(target)).getFile();
+      /* A size match is a sanity check, not a checksum. It catches truncated writes. */
+      if (landed.size !== file.size) { await discard(job.dir, target); return "failed"; }
+    }
+    try { await srcDir.removeEntry(job.shot.name); }
+    catch { return job.kind === "move" ? "kept" : "failed"; }
+    return "done";
+  }
+
+  async function permitted() {
+    if (!(await allow(srcDir))) return false;
+    for (const side of ["l", "r"]) {
+      const a = acts[side];
+      if (a.kind === "move" && a.dir && !(await allow(a.dir))) return false;
+    }
+    return true;
+  }
+
+  async function cleared(jobs) {
+    const dels = jobs.filter((j) => j.kind === "delete").length;
+    const moves = jobs.length - dels;
+    const what = [dels ? "delete " + dels + " files" : "", moves ? "move " + moves + " files" : ""].filter(Boolean).join(" and ");
+    if (!confirm("About to " + what + " in " + srcName() + ".\nDeletes cannot be undone.")) return false;
+    return await permitted();
+  }
+
+  function report(out) {
+    const lines = [out.done.length + " handled."];
+    if (out.kept.length) lines.push("Copied but still in " + srcName() + " (remove by hand): " + out.kept.join(", "));
+    if (out.failed.length) lines.push("Left untouched: " + out.failed.join(", "));
+    $("run-status").textContent = lines.join(" ");
+    $("run-status").classList.toggle("bad", out.kept.length + out.failed.length > 0);
   }
 
   async function run() {
     if (running) return;
-    const jobs = plan().filter((j) => j.shot.handle);
-    if (!jobs.length) return;
-    const dels = jobs.filter((j) => j.kind === "delete").length;
-    const moves = jobs.filter((j) => j.kind === "move").length;
-    const summary = [dels ? "delete " + dels + " files" : "", moves ? "move " + moves + " files" : ""].filter(Boolean).join(" and ");
-    if (!confirm("About to " + summary + " in " + srcName() + ".\nDeletes cannot be undone.")) return;
-    if (!(await allow(srcDir))) { toast("permission denied"); return; }
-    for (const side of ["l", "r"]) {
-      if (acts[side].kind === "move" && acts[side].dir && !(await allow(acts[side].dir))) { toast("permission denied"); return; }
-    }
-
     running = true;
     $("run").disabled = true;
-    const finished = [], failed = [];
+    const jobs = plan().filter((j) => j.shot.handle);
+    if (!jobs.length || !(await cleared(jobs))) { running = false; $("run").disabled = false; return; }
+    const out = { done: [], kept: [], failed: [] };
     for (let i = 0; i < jobs.length; i++) {
-      const job = jobs[i];
-      $("run-status").textContent = (i + 1) + " of " + jobs.length + " · " + job.shot.name;
-      try {
-        if (job.kind === "move") {
-          const file = await job.shot.handle.getFile();
-          const target = await freeName(job.dir, job.shot.name);
-          const fh = await job.dir.getFileHandle(target, { create: true });
-          const stream = await fh.createWritable();
-          await stream.write(file);
-          await stream.close();
-          const landed = await (await job.dir.getFileHandle(target)).getFile();
-          /* only let go of the original once the copy is provably the same size */
-          if (landed.size !== file.size) { failed.push(job.shot.name); continue; }
-        }
-        await srcDir.removeEntry(job.shot.name);
-        finished.push(job.shot.name);
-      } catch { failed.push(job.shot.name); }
+      $("run-status").textContent = (i + 1) + " of " + jobs.length + " · " + jobs[i].shot.name;
+      let result;
+      try { result = await applyJob(jobs[i]); } catch { result = "failed"; }
+      out[result].push(jobs[i].shot.name);
     }
-
-    const gone = new Set(finished);
-    shots = shots.filter((s) => {
-      if (!gone.has(s.name)) return true;
-      URL.revokeObjectURL(s.url); delete sent[s.name]; return false;
-    });
-    save();
+    forget(out.done);
     running = false;
     at = 0;
-    $("run-status").textContent = "Done. " + finished.length + " handled" +
-      (failed.length ? ", " + failed.length + " left alone: " + failed.join(", ") : "") + ".";
-    toast(finished.length + " handled");
-    openDone();
+    openDone();          /* repaints the screen, so the report goes in afterwards */
+    report(out);
+    toast(out.done.length + " handled");
+  }
+  function forget(names) {
+    const gone = new Set(names);
+    shots = shots.filter((s) => {
+      if (!gone.has(s.name)) return true;
+      URL.revokeObjectURL(s.url);
+      delete sent[s.name];
+      return false;
+    });
   }
   $("run").addEventListener("click", run);
 
@@ -548,17 +613,19 @@
     const out = [];
     for (const side of ["l", "r"]) {
       const names = pile(side);
-      if (!names.length) continue;
-      const a = acts[side];
-      const verb = a.kind === "delete" ? "Delete from " + srcName()
-        : a.kind === "move" ? "Move to " + (a.dir ? a.dir.name : "another folder")
-        : "Leave alone in " + srcName();
-      out.push(verb + ":", ...names.map((n) => "- " + n), "");
+      if (names.length) out.push(verbFor(side) + ":", ...names.map((n) => "- " + n), "");
     }
     if (!out.length) return "Nothing decided yet.";
     out.push("Only touch these exact files. Adjust the folder paths if they are not where you expect.");
     return out.join("\n");
   }
+  function verbFor(side) {
+    const a = acts[side];
+    if (a.kind === "delete") return "Delete from " + srcName();
+    if (a.kind === "move") return "Move to " + (a.dir ? a.dir.name : "another folder");
+    return "Leave alone in " + srcName();
+  }
+
   $("copy").addEventListener("click", async () => {
     const text = listText();
     try { await navigator.clipboard.writeText(text); toast("list copied"); }
@@ -569,10 +636,14 @@
       ta.remove();
     }
   });
-  $("back").addEventListener("click", () => { at = Math.min(at, Math.max(0, shots.length - 1)); show("deck"); paint(); });
+  $("back").addEventListener("click", () => {
+    at = Math.min(at, Math.max(0, shots.length - 1));
+    show("deck");
+    paint();
+  });
   $("restart").addEventListener("click", () => {
     if (!confirm("Forget every decision for " + srcName() + "?")) return;
-    sent = {}; save(); at = 0; show("deck"); paint();
+    sent = {}; at = 0; show("deck"); paint();
   });
 
   window.addEventListener("resize", () => { if (!screens.deck.classList.contains("hidden")) paintStrip(); });
